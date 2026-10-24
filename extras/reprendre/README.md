@@ -9,5 +9,8 @@ Opened on its own it shows the same row full screen.
 Permissions: `READ_TV_LISTINGS` (granted with `pm grant` by `build.sh`) and `INTERNET` (posters). The provider serves only
 poster addresses from its latest answer. Without this app the launcher shows no row.
 
-Build and install: `TV_HOST=192.168.1.50 addons/reprendre/build.sh`, then turn on `continue_row` in
+Build and install: `TV_HOST=192.168.1.50 extras/reprendre/build.sh`, then turn on `continue_row` in
 `launcher/app/src/main/res/values/config.xml` and rebuild the launcher. To follow other apps, edit `Items.java`.
+
+`settings_dropdown` (config.xml, off by default) is a second, unrelated build setting added next to it: the Settings button
+opens a short list with the TV settings and the launcher settings.

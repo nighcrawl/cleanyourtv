@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build and install Reprendre, the app behind the launcher's continue_row.
-# Usage: TV_HOST=192.168.1.50 addons/reprendre/build.sh
+# Usage: TV_HOST=192.168.1.50 extras/reprendre/build.sh
 # Needs JDK 17 and the Android SDK (platform 34, build-tools 34.0.0). The signing key is made on first run and
 # kept outside the repo, in ~/.cleanyourtv/.
 set -euo pipefail

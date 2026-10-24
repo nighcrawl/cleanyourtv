@@ -433,7 +433,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!ambientGlow) ambient.setVisibility(View.GONE);
         heroName = findViewById(R.id.heroName);
         hero = findViewById(R.id.hero);
-        if (getResources().getBoolean(R.bool.continue_row)) {
+        if (cfg.continueRow) {
             continueRow = new ContinueRow(this, root, density, new ContinueRow.Host() {
                 @Override public void focusDock() { focusTile(lastFocused < COLUMNS ? lastFocused : 0); }
                 @Override public void focusTop() { firstTopButton().requestFocus(); }
@@ -702,7 +702,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             ((TextView) btnSettings).setText(R.string.launcher_settings);
             ((TextView) btnSettings).setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_home_settings_pill, 0, 0, 0);
         }
-        settingsDropdown = getResources().getBoolean(R.bool.settings_dropdown);
+        settingsDropdown = cfg.settingsDropdown;
         if (settingsDropdown) {
             ((TextView) btnSettings).setText(R.string.settings);
             ((TextView) btnSettings).setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_settings, 0, 0, 0);
