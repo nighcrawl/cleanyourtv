@@ -228,6 +228,9 @@
     <!-- A direct Launcher settings action instead of TV Settings in the header (or top_menu).
          Off by default; a theme can set "launcher_settings_button": true. -->
     <bool name="launcher_settings_button">true</bool>
+    <!-- The Settings button opens a short list, the TV's settings and the launcher's settings, instead of going
+         straight to one of them. Hold OK keeps the extra home actions. Off by default. -->
+    <bool name="settings_dropdown">true</bool>
     <!-- The dock band as light frosted glass, like the Inputs, Wi-Fi and Settings pills, so a sky or wallpaper shows
          through it. false (the default) keeps the solid near-black band, or the cinematic shelf's dark glass. Can
          also be set with "dock_glass": true in a theme's config.json. -->
