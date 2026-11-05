@@ -29,6 +29,8 @@ public class GlassView extends View {
     /** glass_style rim or halo: no sheen and no fill, only the crisp rim (and, for halo, a lighter outer glow). */
     private boolean flat;
     private boolean halo;
+    /** Home by day: the plain glow is a soft shadow instead of white light, which would vanish on the light background. */
+    private boolean day;
 
     public GlassView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -44,11 +46,16 @@ public class GlassView extends View {
         setLayerType(LAYER_TYPE_HARDWARE, null);
     }
 
-    /** Tints the rim and the outer glow; 0 restores the plain white glass. */
+    void setDay(boolean day) {
+        this.day = day;
+        setAccent(0);
+    }
+
+    /** Tints the rim and the outer glow; 0 restores the plain glass (white, or a soft shadow by day). */
     void setAccent(int argb) {
         if (argb == 0) {
-            glowRgb = 0xFFFFFF;
-            glowAlpha = 0x30;
+            glowRgb = day ? 0x1A2030 : 0xFFFFFF;
+            glowAlpha = day ? 0x3A : 0x30;
             rim.setColor(0xCCFFFFFF);
         } else {
             glowRgb = argb & 0xFFFFFF;

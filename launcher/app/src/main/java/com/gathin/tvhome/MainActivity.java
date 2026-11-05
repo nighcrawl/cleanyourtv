@@ -209,6 +209,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int glassCardW;   // width of the tile the glass was last fitted to
     private boolean glassShown;
     private final Rect tileRect = new Rect();
+    private final Rect headerRect = new Rect();
     private final Rect revealRect = new Rect();
     // Static so they survive the activity being destroyed while another app is open (low-memory TVs,
     // or Developer options → "Don't keep activities"); they only reset when the process dies.
@@ -367,6 +368,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // The pill follows the network callbacks and each return to Home; only the diya's flame follows the
             // signal level, so only it needs this minute's binder calls (about 7 ms on the UI thread).
             if (festive) updateWifiLabel();
+            if (autoTheme && sunIsUp() != day) {   // sunrise or sunset while Home is on screen
+                recreate();
+                return;
+            }
             sky.update();
             wallpaperPlayer.update();
             handler.postDelayed(this, MINUTE_MS);
@@ -376,10 +381,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
+        autoTheme = cfg.autoTheme;
+        day = autoTheme && sunIsUp();
+        if (day) setTheme(R.style.Theme_TvHome_Day);   // before the layout is inflated: it reads the home* colours
+        setContentView(R.layout.activity_main);
+        density = getResources().getDisplayMetrics().density;
         appLibrarySelection = cfg.appLibrarySelection;
         // restore_key_services: after a force stop, put back the remote's accessibility helpers that Android took
         // off the list (needs WRITE_SECURE_SETTINGS, granted by build-and-install with RESTORE_KEY_SERVICES=1).
@@ -413,16 +421,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         coocaaSources = cfg.coocaaSources;
 
         root = findViewById(R.id.root);
-        root.setBackgroundColor(cfg.backgroundColor);
+        root.setBackgroundColor(day ? cfg.dayBackgroundColor : cfg.backgroundColor);
         // root fills the window with an opaque colour (Config keeps background_color opaque), so the window's own
         // black under it is a second full-screen fill on every frame for nothing. The starting window still uses
         // the theme's background, so launch looks the same.
         getWindow().setBackgroundDrawable(null);
         wallpaperPlayer = new WallpaperPlayer(this, root, cfg);
         sky = findViewById(R.id.sky);
-        sky.setIntensity(cfg.skyIntensity);
+        sky.setIntensity(day ? 0 : cfg.skyIntensity);   // the sky is a night backdrop
         glass = findViewById(R.id.glass);
         glass.setStyle(cfg.glassStyle);
+        glass.setDay(day);
         if (festive) glass.setAccent(festival.accentColor());
         ambient = findViewById(R.id.ambient);
         // The glow is one bitmap, so its alpha can be applied while drawing it. Otherwise every frame of
@@ -438,7 +447,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 @Override public void focusDock() { focusTile(lastFocused < COLUMNS ? lastFocused : 0); }
                 @Override public void focusTop() { firstTopButton().requestFocus(); }
                 @Override public void open(Intent intent) { MainActivity.this.open(intent); }
-            });
+                @Override public void onHeroCovered(boolean covered) {
+                    // A hero hidden by dock_title stays hidden; otherwise the row takes its place while it is shown.
+                    if (hero.getVisibility() != View.GONE) hero.setVisibility(covered ? View.INVISIBLE : View.VISIBLE);
+                }
+                @Override public void onCardFocused(float cx, float cy, int w, int h, float radius) {
+                    placeGlassOver(cx, cy, w, h, radius);
+                }
+            }, animations, reducedMotion, advancedEffects, focusOvershoot, cfg.continueColumns);
+            glass.bringToFront();   // the highlight is drawn over the posters, as over the tiles
         }
         // The hero is now a group (name, and the cinematic lines): without this every fade of the default
         // shelf would render it through an offscreen buffer first, as the glow above notes.
@@ -461,8 +478,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!cfg.showGreeting) greeting.setVisibility(View.GONE);
         if (cfg.headerWhite) {
             // The clock's own white for the date and the line before it, instead of their dimmed whites.
-            ((TextView) findViewById(R.id.date)).setTextColor(Color.WHITE);
-            findViewById(R.id.clockDivider).setBackgroundColor(Color.WHITE);
+            ((TextView) findViewById(R.id.date)).setTextColor(ink(0xFF));
+            findViewById(R.id.clockDivider).setBackgroundColor(ink(0xFF));
         }
         if (getResources().getBoolean(R.bool.rtl_menu_bar)) {
             // Center Hebrew greetings over the numeric time, independent of a visible AM/PM label.
@@ -575,7 +592,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
         if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding,
-                singleRow, cfg.dockBandAll));
+                singleRow, cfg.dockBandAll, day));
         if (cfg.fadeRows) TopFade.attach(grid, 48 * density);
         // Reduced motion: the tiles are simply there, with no entrance (reloadApps skips it there too).
         if (animations && !reducedMotion) {
@@ -789,6 +806,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnReorder.setOnKeyListener(pillKeys);
         btnLibraryTop.setOnKeyListener(pillKeys);
         for (View button : topAppButtons) button.setOnKeyListener(pillKeys);
+        for (View pill : new View[]{btnInputs, btnWifi, btnReorder, btnLibraryTop, btnSettings}) dayPill(pill);
         if (advancedEffects) {
             List<View> pills = new ArrayList<>(Arrays.asList(btnInputs, btnWifi, btnReorder, btnLibraryTop, btnSettings));
             pills.addAll(topAppButtons);
@@ -802,7 +820,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
-            boolean onTile = newF != null && newF.getId() == R.id.card;
+            boolean onTile = newF != null && (newF.getId() == R.id.card || continueRow != null && continueRow.owns(newF));
             if (!onTile) hideGlass();
         });
 
@@ -930,6 +948,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             recreate();
             return;
         }
+        if (autoTheme && sunIsUp() != day) {
+            recreate();
+            return;
+        }
         // Something changed in Launcher settings: rebuild with it, however the settings were left. Only Back
         // delivered their RESULT_OK; Home (the remote's button) clears them off this task and the result comes
         // back cancelled, so a new wallpaper or layout waited for the next process start.
@@ -979,6 +1001,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 lastPetalShower = today;
                 handler.postDelayed(this::playPetalShower, 450);
             }
+        }
+    }
+
+    /** config.xml auto_theme is on, and Home is built light (the sun was up when it was built). */
+    private boolean autoTheme, day;
+
+    /** Whether the sun is up now at the configured place (a fixed reference day without one). */
+    private boolean sunIsUp() {
+        Calendar now = Calendar.getInstance();
+        return Sun.isDay(now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE), SkyView.sunTimes(this));
+    }
+
+    /** The white Home draws at night as dark ink by day, with the given alpha (0 to 255). */
+    private int ink(int alpha) {
+        return alpha << 24 | (day ? 0x1A2030 : 0xFFFFFF);
+    }
+
+    /** A top-bar pill by day: frosted white with ink text, and ink on the ink pill when it has focus. */
+    private void dayPill(View pill) {
+        if (!day) return;
+        pill.setBackgroundResource(R.drawable.pill_bg_day);
+        if (pill instanceof TextView) {
+            android.content.res.ColorStateList ink = getColorStateList(R.color.pill_text_day);
+            ((TextView) pill).setTextColor(ink);
+            ((TextView) pill).setCompoundDrawableTintList(ink);
         }
     }
 
@@ -1640,23 +1687,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             glassAccent = accent;
             glass.setAccent(accent);
         }
-        if (!glassShown) {
-            springX.cancel();
-            springY.cancel();
-            glass.setTranslationX(x);
-            glass.setTranslationY(y);
-            if (animations && !reducedMotion) glass.animate().alpha(1f).setDuration(180).start();
-            else glass.setAlpha(1f);
-            glassShown = true;
-        } else if (!animations) {
-            springX.cancel();
-            springY.cancel();
-            glass.setTranslationX(x);
-            glass.setTranslationY(y);
-        } else {
-            springX.animateToFinalPosition(x - glassScrollShiftX);
-            springY.animateToFinalPosition(y - glassScrollShift);
-        }
+        moveGlass(x, y);
         View item = (View) card.getParent();
         if (dockRow && (singleRow || position < COLUMNS)) {
             // Dock: park it at the bottom of the screen and show the top shelf for this app. In a single row
@@ -1681,6 +1712,53 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
+    /** Springs the glass to its top-left corner (x, y), or puts it there at once the first time and without animations. */
+    private void moveGlass(float x, float y) {
+        if (!glassShown) {
+            springX.cancel();
+            springY.cancel();
+            glass.setTranslationX(x);
+            glass.setTranslationY(y);
+            if (animations && !reducedMotion) glass.animate().alpha(1f).setDuration(180).start();
+            else glass.setAlpha(1f);
+            glassShown = true;
+        } else if (!animations) {
+            springX.cancel();
+            springY.cancel();
+            glass.setTranslationX(x);
+            glass.setTranslationY(y);
+        } else {
+            springX.animateToFinalPosition(x - glassScrollShiftX);
+            springY.animateToFinalPosition(y - glassScrollShift);
+        }
+    }
+
+    /** The glass over a Continue watching poster centred at (cx, cy), zoomed and lifted like an app tile. */
+    private void placeGlassOver(float cx, float cy, int cardW, int cardH, float radius) {
+        float pad = 6f * density;
+        float scale = adapter.focusScale();
+        float w = cardW * scale + 2 * pad;
+        float h = cardH * scale + 2 * pad;
+        float x = cx - w / 2f;
+        float y = cy - h / 2f - (advancedEffects ? 4f * density : 0f);
+        ViewGroup.LayoutParams lp = glass.getLayoutParams();
+        if (lp.width != (int) w || lp.height != (int) h) {
+            lp.width = (int) w;
+            lp.height = (int) h;
+            glass.setLayoutParams(lp);
+        }
+        glass.setRadius(radius * scale);
+        glassCardW = cardW;
+        glassTargetX = x;
+        glassTargetY = y;
+        // The posters have no colour of their own to glow in: plain white glass, unless a festive skin owns the tint.
+        if (!festive && glassAccent != 0) {
+            glassAccent = 0;
+            glass.setAccent(0);
+        }
+        moveGlass(x, y);
+    }
+
     /** Refits the glass to the focused holder once the grid layout and tile dimensions settle. */
     private void refitGlass() {
         if (isDestroyed() || adapter.appCount() == 0 || libraryFocusPending) return;
@@ -1703,7 +1781,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
-        if (continueRow != null) continueRow.show(y);
+        if (continueRow != null) {
+            // The row may not cover the header (clock, date, top buttons): it starts under it.
+            View header = (View) clockBlock.getParent();
+            Rect bar = headerRect;
+            bar.set(0, 0, header.getWidth(), header.getHeight());
+            root.offsetDescendantRectToMyCoords(header, bar);
+            continueRow.show(y, dockTopInRoot, bar.bottom + 4 * density);
+        }
         boolean changed = !label.contentEquals(heroName.getText());
         if (cinematic && heroArtAlpha > 0f) showHeroArt(position);
 
@@ -1854,7 +1939,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         String text = getString(R.string.last_opened, rel);
         SpannableString line = new SpannableString(text);
         int at = text.indexOf(rel);
-        if (at >= 0) line.setSpan(new ForegroundColorSpan(0xFFFFFFFF), at, at + rel.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (at >= 0) line.setSpan(new ForegroundColorSpan(ink(0xFF)), at, at + rel.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         heroMeta.setText(line);
         heroMeta.setVisibility(View.VISIBLE);
     }
@@ -1879,7 +1964,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         for (int i = 0; i < count; i++) {
             View dot = heroDots.getChildAt(rtlAppGrid ? count - 1 - i : i);
             boolean on = i == position;
-            ((GradientDrawable) dot.getBackground()).setColor(on ? 0xFFFFFFFF : 0x4DFFFFFF);
+            ((GradientDrawable) dot.getBackground()).setColor(on ? ink(0xFF) : ink(0x4D));
             ViewGroup.LayoutParams lp = dot.getLayoutParams();
             int w = (int) ((on ? 20 : 6) * density);
             if (lp.width != w) {
@@ -2313,6 +2398,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             Intent target = launch;
             button.setOnClickListener(v -> open(new Intent(target)));
             bar.addView(button, bar.indexOfChild(btnWifi));
+            if (day) button.setBackgroundResource(R.drawable.pill_bg_day);   // its logo keeps its own colours
             topAppButtons.add(button);
         }
     }

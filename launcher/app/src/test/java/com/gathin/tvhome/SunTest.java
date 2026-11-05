@@ -29,6 +29,22 @@ public class SunTest {
     }
 
     @Test
+    public void isDayBetweenSunriseAndSunsetOnly() {
+        int[] t = {8 * 60 + 40, 15 * 60 + 55};
+        assertTrue(Sun.isDay(12 * 60, t));
+        assertTrue(Sun.isDay(t[0], t));
+        assertTrue(!Sun.isDay(t[1], t));
+        assertTrue(!Sun.isDay(6 * 60, t));
+    }
+
+    @Test
+    public void isDayUsesTheReferenceDayWithoutAPlace() {
+        assertTrue(Sun.isDay(Sky.REF_SUNRISE, null));
+        assertTrue(!Sun.isDay(Sky.REF_SUNRISE - 1, null));
+        assertTrue(!Sun.isDay(Sky.REF_SUNSET, null));
+    }
+
+    @Test
     public void noSunriseOrSunsetAtThePoles() {
         assertNull(Sun.riseAndSet(LocalDate.of(2026, 12, 21), 78.2, 15.6, ZoneId.of("Arctic/Longyearbyen")));
         assertNull(Sun.riseAndSet(LocalDate.of(2026, 6, 21), 78.2, 15.6, ZoneId.of("Arctic/Longyearbyen")));

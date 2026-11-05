@@ -4,6 +4,22 @@
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:colorBackground">@android:color/black</item>
         <item name="android:windowAnimationStyle">@null</item>
+        <item name="homeText">#FFFFFFFF</item>
+        <item name="homeTextHigh">#E6FFFFFF</item>
+        <item name="homeTextMid">#B3FFFFFF</item>
+        <item name="homeTextLow">#99FFFFFF</item>
+        <item name="homeDivider">#33FFFFFF</item>
+    </style>
+
+    <!-- Home by day (config.xml, auto_theme): the same white strengths as dark ink. Only Home sets this theme. -->
+    <style name="Theme.TvHome.Day">
+        <item name="android:windowBackground">#FFE9EDF3</item>
+        <item name="android:colorBackground">#FFE9EDF3</item>
+        <item name="homeText">#FF1A2030</item>
+        <item name="homeTextHigh">#E61A2030</item>
+        <item name="homeTextMid">#B31A2030</item>
+        <item name="homeTextLow">#991A2030</item>
+        <item name="homeDivider">#331A2030</item>
     </style>
 
     <!-- Frosted pill, tvOS style. -->

@@ -13,6 +13,13 @@ final class Sun {
     private Sun() {
     }
 
+    /** Whether the sun is up at this minute of the day; without a place (null) the reference day of Sky: 07:30 to 19:00. */
+    static boolean isDay(int minute, int[] riseAndSet) {
+        int rise = riseAndSet == null ? Sky.REF_SUNRISE : riseAndSet[0];
+        int set = riseAndSet == null ? Sky.REF_SUNSET : riseAndSet[1];
+        return minute >= rise && minute < set;
+    }
+
     /**
      * Local minutes of the day of sunrise and sunset, as {@code {sunrise, sunset}}, or null when the
      * sun does not rise or does not set that day (polar night or midnight sun).

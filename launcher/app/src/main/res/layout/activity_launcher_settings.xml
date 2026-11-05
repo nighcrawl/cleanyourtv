@@ -89,6 +89,30 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/continueColumnsLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/continue_columns_label"
+            android:textColor="#FFFFFFFF"
+            android:textSize="20sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/continueColumnsRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView android:id="@+id/continue2" style="@style/SettingsColumnChoice" android:text="2" />
+            <TextView android:id="@+id/continue3" style="@style/SettingsColumnChoice" android:text="3" />
+            <TextView android:id="@+id/continue4" style="@style/SettingsColumnChoice" android:text="4" />
+            <TextView android:id="@+id/continue5" style="@style/SettingsColumnChoice" android:text="5" />
+        </LinearLayout>
+
+        <TextView
             android:id="@+id/wallpaperChoice"
             style="@style/SettingsRow"
             android:layout_marginTop="28dp" />
@@ -115,6 +139,12 @@
             android:id="@+id/openOnStartChoice"
             style="@style/SettingsRow"
             android:layout_marginTop="28dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/themeChoice"
+            style="@style/SettingsRow"
+            android:layout_marginTop="18dp"
             android:visibility="gone" />
 
         <TextView

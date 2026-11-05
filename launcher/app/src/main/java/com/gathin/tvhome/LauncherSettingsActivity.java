@@ -32,8 +32,11 @@ public final class LauncherSettingsActivity extends Activity {
     private TextView advancedChoice;
     private TextView followThemeChoice;
     private TextView openOnStartChoice;
+    private TextView themeChoice;
     private int columns;
     private int rowsBelowDock;
+    private int continueColumns;
+    private final TextView[] continueChoices = new TextView[4];
     private int dockOpacity;
     private boolean animations;
     private boolean advancedEffects;
@@ -52,6 +55,7 @@ public final class LauncherSettingsActivity extends Activity {
         });
         columns = config.columns;
         rowsBelowDock = config.rowsBelowDock;
+        continueColumns = config.continueColumns;
         dockOpacity = config.dockOpacity;
         animations = config.animations;
         advancedEffects = config.animations && config.advancedEffects;
@@ -80,6 +84,22 @@ public final class LauncherSettingsActivity extends Activity {
                 refresh();
             });
         }
+        int[] continueIds = {R.id.continue2, R.id.continue3, R.id.continue4, R.id.continue5};
+        for (int i = 0; i < continueIds.length; i++) {
+            final int value = i + 2;
+            continueChoices[i] = findViewById(continueIds[i]);
+            continueChoices[i].setOnClickListener(v -> {
+                if (continueColumns == value) return;
+                continueColumns = value;
+                choices.edit().putInt(Config.CONTINUE_COLUMNS_KEY, value).apply();
+                changed();
+                refresh();
+            });
+        }
+        if (config.continueRow) {
+            findViewById(R.id.continueColumnsLabel).setVisibility(View.VISIBLE);
+            findViewById(R.id.continueColumnsRow).setVisibility(View.VISIBLE);
+        }
         int[] dockIds = {R.id.dock100, R.id.dock70, R.id.dock50, R.id.dock30};
         for (int i = 0; i < dockIds.length; i++) {
             final int value = DOCK_OPACITIES[i];
@@ -98,6 +118,7 @@ public final class LauncherSettingsActivity extends Activity {
             reverseRow(columnChoices);
             reverseRow(rowChoices);
             reverseRow(dockChoices);
+            reverseRow(continueChoices);
         }
         wallpaperChoice = findViewById(R.id.wallpaperChoice);
         wallpaperChoice.setOnClickListener(v -> showWallpaperPicker());
@@ -128,18 +149,19 @@ public final class LauncherSettingsActivity extends Activity {
             openOnStartChoice.setVisibility(View.VISIBLE);
             openOnStartChoice.setOnClickListener(v -> showOpenOnStartPicker());
         }
+        themeChoice = findViewById(R.id.themeChoice);
+        if (config.themePicker) {
+            themeChoice.setVisibility(View.VISIBLE);
+            themeChoice.setOnClickListener(v -> showThemePicker());
+        }
         followThemeChoice = findViewById(R.id.followThemeChoice);
         followThemeChoice.setOnClickListener(v -> {
             if (!hasOnTvChoices()) return;
             choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
                     .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
-                    .remove(Config.DOCK_OPACITY_KEY).remove(OpenOnStart.KEY).commit();
-            Config current = Config.load(this);
-            columns = current.columns;
-            rowsBelowDock = current.rowsBelowDock;
-            dockOpacity = current.dockOpacity;
-            animations = current.animations;
-            advancedEffects = current.animations && current.advancedEffects;
+                    .remove(Config.DOCK_OPACITY_KEY).remove(OpenOnStart.KEY).remove(Config.THEME_PRESET_KEY)
+                    .remove(Config.CONTINUE_COLUMNS_KEY).commit();
+            reloadFromConfig();
             changed();
             refresh();
         });
@@ -152,6 +174,43 @@ public final class LauncherSettingsActivity extends Activity {
         refresh();
         if (config.launcherSettingsButton) reorderChoice.requestFocus();
         else columnChoices[Math.max(0, Math.min(columns - 4, 3))].requestFocus();
+    }
+
+    /** The numbers the rows show, read again after a choice changed what the theme gives. */
+    private void reloadFromConfig() {
+        Config current = Config.load(this);
+        columns = current.columns;
+        rowsBelowDock = current.rowsBelowDock;
+        continueColumns = current.continueColumns;
+        dockOpacity = current.dockOpacity;
+        animations = current.animations;
+        advancedEffects = current.animations && current.advancedEffects;
+    }
+
+    /** The theme pushed from the computer, then every theme packed into the app. The pick is read at once. */
+    private void showThemePicker() {
+        List<String> presets = Config.presets(this);
+        String[] labels = new String[presets.size() + 1];
+        labels[0] = getString(R.string.theme_pushed);
+        for (int i = 0; i < presets.size(); i++) labels[i + 1] = presets.get(i);
+        String current = choices.getString(Config.THEME_PRESET_KEY, null);
+        int checked = presets.indexOf(current) + 1;   // -1 (no pick, or one that is gone) lands on the first row
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.theme_label)
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    if (which == 0) choices.edit().remove(Config.THEME_PRESET_KEY).commit();
+                    else choices.edit().putString(Config.THEME_PRESET_KEY, presets.get(which - 1)).commit();
+                    // The layout and motion choices belong to the theme they were made on.
+                    choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
+                            .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
+                            .remove(Config.DOCK_OPACITY_KEY).remove(Config.CONTINUE_COLUMNS_KEY).commit();
+                    reloadFromConfig();
+                    changed();
+                    refresh();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void reverseRow(TextView[] views) {
@@ -276,6 +335,9 @@ public final class LauncherSettingsActivity extends Activity {
         for (int i = 0; i < rowChoices.length; i++) {
             rowChoices[i].setSelected(rowsBelowDock == i);
         }
+        for (int i = 0; i < continueChoices.length; i++) {
+            continueChoices[i].setSelected(continueColumns == i + 2);
+        }
         for (int i = 0; i < dockChoices.length; i++) {
             dockChoices[i].setSelected(dockOpacity == DOCK_OPACITIES[i]);
         }
@@ -291,6 +353,8 @@ public final class LauncherSettingsActivity extends Activity {
                         : wallpaperCurrent != null ? wallpaperCurrent
                         : getString(R.string.wallpaper_theme_default)));
         openOnStartChoice.setText(getString(R.string.open_on_start_state, openOnStartLabel()));
+        String preset = choices.getString(Config.THEME_PRESET_KEY, null);
+        themeChoice.setText(getString(R.string.theme_state, preset != null ? preset : getString(R.string.theme_pushed)));
         followThemeChoice.setSelected(!hasOnTvChoices());
     }
 
@@ -298,7 +362,8 @@ public final class LauncherSettingsActivity extends Activity {
         return choices.contains("columns") || choices.contains(Config.ROWS_BELOW_DOCK_KEY)
                 || choices.contains("animations") || choices.contains("advanced_effects")
                 || choices.contains(Config.WALLPAPER_CHOICE_KEY) || choices.contains(Config.DOCK_OPACITY_KEY)
-                || choices.contains(OpenOnStart.KEY);
+                || choices.contains(OpenOnStart.KEY) || choices.contains(Config.THEME_PRESET_KEY)
+                || choices.contains(Config.CONTINUE_COLUMNS_KEY);
     }
 
     private void open(Intent intent) {

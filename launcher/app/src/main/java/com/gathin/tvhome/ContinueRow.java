@@ -6,16 +6,15 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.Rect;
-import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -38,15 +37,19 @@ final class ContinueRow {
         void focusDock();
         void focusTop();
         void open(Intent intent);
+        /** A poster took focus: its centre in the root, its size at rest and its corner radius, all in px. */
+        /** The row took the place of the dock app's name (no room for both), or gave it back. */
+        void onHeroCovered(boolean covered);
+        void onCardFocused(float centerX, float centerY, int width, int height, float radius);
     }
 
     private static final Uri ITEMS = Uri.parse("content://tv.reprendre.items/items");
     private static final int MAX_ITEMS = 24;
     private static final long REFRESH_MS = 30_000;
-    private static final int HEIGHT_DP = 192;
-    private static final int CARD_H_DP = 118;
-    /** Cards that fill the grid's width at once; the row scrolls for the rest. */
-    private static final int GROUP = 3;
+    /** What sits around the posters (heading, name lines, paddings), in dp: the row is this plus a poster's height. */
+    private static final int FIXED_DP = 82;
+    /** The most cards across: past it a 16:9 poster is too small to read, and the row stays hidden. */
+    private static final int MAX_COLUMNS = 6;
     /** Space between two posters, and the part of it a card owns: its 4dp frame on each side plus this margin. */
     private static final int GAP_DP = 14;
     private static final int MARGIN_DP = GAP_DP - 8;
@@ -63,21 +66,38 @@ final class ContinueRow {
     private final LinearLayout box;
     private final LinearLayout cards;
     private final HorizontalScrollView scroll;
-    /** Poster width in px: GROUP posters and their gaps fill the width between the grid's first and last tile. */
-    private final int cardW;
+    /** Cards that fill the grid's width at once (the row scrolls for the rest), and a poster's width in px for that many. */
+    private int columns, cardW;
+    /** The number of columns asked for (config.xml, continue_columns); more may be shown where the room is short. */
+    private final int columnsChoice;
+    /** Posters are decoded for 3 across, twice their drawn size, whatever the columns are: 2 across still draws them sharp. */
+    private final int decodeW;
     /** Distance of the grid's first and last tiles from the screen edges, and the screen width, in px. */
     private final int inset, screenW;
+    /** The focus zoom's modes, the same as the app tiles' (see Motion.zoom). */
+    private final boolean animations, reducedMotion, advancedEffects, overshoot;
+    /** The poster that has focus, or null while focus is elsewhere. */
+    private View focusedCard;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private List<Entry> entries = new ArrayList<>();
     private long lastLoad = -REFRESH_MS;
     private boolean loading;
     private boolean shown;
-    private float heroTop;
+    private float heroTop, dockTop, topLimit;
+    /** Poster height in px: always 16:9 of cardW. */
+    private int posterH;
+    /** The row fits between the top bar and the dock's name; false keeps it hidden instead of over the clock. */
+    private boolean fits = true;
 
-    ContinueRow(Activity activity, FrameLayout root, float density, Host host) {
+    ContinueRow(Activity activity, FrameLayout root, float density, Host host, boolean animations,
+                boolean reducedMotion, boolean advancedEffects, boolean overshoot, int columns) {
         this.activity = activity;
         this.host = host;
         this.d = density;
+        this.animations = animations;
+        this.reducedMotion = reducedMotion;
+        this.advancedEffects = advancedEffects;
+        this.overshoot = overshoot;
         box = new LinearLayout(activity);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setClipChildren(false);
@@ -85,7 +105,7 @@ final class ContinueRow {
         box.setVisibility(View.INVISIBLE);
         TextView heading = new TextView(activity);
         heading.setText(R.string.continue_row_title);
-        heading.setTextColor(0xB3FFFFFF);
+        heading.setTextColor(themeColor(R.attr.homeTextMid));
         heading.setTextSize(15);
         heading.setSingleLine(true);
         heading.setTypeface(UiFont.get(activity, R.string.font_medium));
@@ -93,7 +113,9 @@ final class ContinueRow {
         // The grid's first and last tiles sit this far from the screen edges (about 8% of the width); the row lines up with them.
         screenW = activity.getResources().getDisplayMetrics().widthPixels;
         inset = Math.round(screenW * 0.0805f);
-        cardW = (screenW - 2 * inset - (GROUP - 1) * px(GAP_DP)) / GROUP;
+        decodeW = 2 * widthFor(3);
+        columnsChoice = columns;
+        setColumns(columns);
         heading.setPadding(inset, 0, 0, 0);
         box.addView(heading);
         // The default scroll puts a focused card flush against the screen edge; reveal() keeps it inside the inset instead.
@@ -103,22 +125,64 @@ final class ContinueRow {
             }
         };
         scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setClipChildren(false);   // the focused poster's zoom and lift reach past the scroll's edges
         scroll.setClipToPadding(false);   // the row spans the whole screen: cards scroll out at its edges, not at the left margin
         // A card sits 4dp inside its focus frame and keeps a small margin after it: with these paddings the first card
         // starts at the inset and, scrolled to the end, the last one ends at the inset from the right edge.
-        scroll.setPadding(inset - px(4), px(2), inset - px(MARGIN_DP + 4), px(2));
-        cards = new LinearLayout(activity);
+        // The top padding leaves room for the focused poster's zoom and lift above the others.
+        scroll.setPadding(inset - px(4), px(8), inset - px(MARGIN_DP + 4), px(8));
+        scroll.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
+            if (focusedCard != null) notifyFocused(focusedCard);   // the highlight follows the posters as they scroll
+        });
+        cards = new LinearLayout(activity) {
+            {
+                setChildrenDrawingOrderEnabled(true);
+            }
+
+            /** The focused card is drawn last, so its zoom lies over its neighbours instead of under them. */
+            @Override protected int getChildDrawingOrder(int count, int i) {
+                int f = indexOfChild(getFocusedChild());
+                if (f < 0) return i;
+                return i == count - 1 ? f : i >= f ? i + 1 : i;
+            }
+        };
         cards.setClipChildren(false);
         scroll.addView(cards);
         box.addView(scroll);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, px(HEIGHT_DP),
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, px(FIXED_DP) + posterH,
                 Gravity.TOP | Gravity.START);
         
         root.addView(box, lp);
     }
 
+    /** A poster's width for this many across: they and their gaps fill the width between the grid's first and last tile. */
+    private int widthFor(int count) {
+        return (screenW - 2 * inset - (count - 1) * px(GAP_DP)) / count;
+    }
+
+    /** True when the number changed, so the cards must be built again at the new size. */
+    private boolean setColumns(int count) {
+        if (count == columns) return false;
+        columns = count;
+        cardW = widthFor(count);
+        posterH = cardW * 9 / 16;
+        return true;
+    }
+
+    /** One of Home's text colours in the activity's theme: white at night, dark ink by day (auto_theme). */
+    private int themeColor(int attr) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        activity.getTheme().resolveAttribute(attr, value, true);
+        return value.data;
+    }
+
     private int px(int dp) {
         return (int) (dp * d);
+    }
+
+    /** Whether v is one of the cards, so the launcher keeps the glass highlight while focus is on it. */
+    boolean owns(View v) {
+        return v != null && v.getParent() == cards;
     }
 
     boolean hasItems() {
@@ -131,12 +195,40 @@ final class ContinueRow {
         return cards.getChildAt(0).requestFocus();
     }
 
-    /** Shows the row just above the top shelf, whose top edge is heroTopY in the root. */
-    void show(float heroTopY) {
+    /**
+     * Shows the row just above the top shelf (the dock app's name), whose top edge is heroTopY in the root, and
+     * below the top bar, which ends at topLimitY. Where the room between them is short (big tiles, rows under the
+     * dock) the row takes the name's place, down to dockTopY, and the host hides the name. The posters are always
+     * 16:9: when even that is too short for them, there are more of them across (narrower), up to MAX_COLUMNS, and
+     * past that the row stays hidden.
+     */
+    void show(float heroTopY, float dockTopY, float topLimitY) {
         shown = true;
         heroTop = heroTopY;
+        dockTop = dockTopY;
+        topLimit = topLimitY;
         if (entries.isEmpty()) return;
-        box.setY(heroTopY - 6 * d - px(HEIGHT_DP));
+        int fixed = px(FIXED_DP);   // heading, name lines and paddings around the posters
+        float bottom = heroTopY - 6 * d;
+        int wanted = columnsChoice;
+        boolean covered = widthFor(wanted) * 9 / 16 > bottom - topLimitY - fixed;
+        if (covered) bottom = dockTopY - 16 * d;
+        int count = wanted;
+        while (count < MAX_COLUMNS && widthFor(count) * 9 / 16 > bottom - topLimitY - fixed) count++;
+        fits = widthFor(count) * 9 / 16 <= bottom - topLimitY - fixed;
+        host.onHeroCovered(fits && covered);
+        if (!fits) {
+            box.animate().cancel();
+            box.setAlpha(0f);
+            box.setVisibility(View.INVISIBLE);
+            return;
+        }
+        if (setColumns(count)) {
+            buildCards();
+            box.getLayoutParams().height = fixed + posterH;
+            box.requestLayout();
+        }
+        box.setY(bottom - fixed - posterH);
         if (box.getVisibility() != View.VISIBLE) {
             box.setAlpha(0f);
             box.setVisibility(View.VISIBLE);
@@ -202,7 +294,7 @@ final class ContinueRow {
                 BitmapFactory.decodeStream(in, null, bounds);
             }
             BitmapFactory.Options o = new BitmapFactory.Options();
-            o.inSampleSize = Math.max(1, bounds.outWidth / (cardW * 2));
+            o.inSampleSize = Math.max(1, bounds.outWidth / decodeW);
             o.inPreferredConfig = Bitmap.Config.RGB_565;
             try (InputStream in = cr.openInputStream(uri)) {
                 return BitmapFactory.decodeStream(in, null, o);
@@ -220,46 +312,45 @@ final class ContinueRow {
                     && (list.get(i).poster == null) == (entries.get(i).poster == null);
         }
         if (same) return;
-        View focused = cards.getFocusedChild();
-        int focusedIndex = focused == null ? -1 : cards.indexOfChild(focused);
         entries = list;
-        cards.removeAllViews();
-        for (int i = 0; i < list.size(); i++) cards.addView(card(list.get(i), i));
+        buildCards();
         if (list.isEmpty()) {
             hide();
             shown = true;   // still on the dock: a later refresh with rows can show it
         } else if (shown) {
-            show(heroTop);
-            if (focusedIndex >= 0) cards.getChildAt(Math.min(focusedIndex, list.size() - 1)).requestFocus();
+            show(heroTop, dockTop, topLimit);
+        }
+    }
+
+    /** The cards for the current rows at the current size; focus stays on the same position. */
+    private void buildCards() {
+        View focused = cards.getFocusedChild();
+        int focusedIndex = focused == null ? -1 : cards.indexOfChild(focused);
+        cards.removeAllViews();
+        for (int i = 0; i < entries.size(); i++) cards.addView(card(entries.get(i), i));
+        if (focusedIndex >= 0 && cards.getChildCount() > 0) {
+            cards.getChildAt(Math.min(focusedIndex, cards.getChildCount() - 1)).requestFocus();
         }
     }
 
     private View card(Entry e, int index) {
-        int w = cardW, h = px(CARD_H_DP);
+        int w = cardW, h = posterH;
         LinearLayout col = new LinearLayout(activity);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setFocusable(true);
         col.setClickable(true);
+        col.setClipChildren(false);
+        col.setClipToPadding(false);
         col.setPadding(px(4), px(4), px(4), px(4));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(w + px(8), LinearLayout.LayoutParams.WRAP_CONTENT);
         clp.setMarginEnd(px(MARGIN_DP));
         col.setLayoutParams(clp);
-        GradientDrawable idle = new GradientDrawable();
-        idle.setColor(Color.TRANSPARENT);
-        idle.setCornerRadius(px(12));
-        GradientDrawable focus = new GradientDrawable();
-        focus.setColor(0x26FFFFFF);
-        focus.setStroke(px(2), Color.WHITE);
-        focus.setCornerRadius(px(12));
-        StateListDrawable states = new StateListDrawable();
-        states.addState(new int[]{android.R.attr.state_focused}, focus);
-        states.addState(new int[]{}, idle);
-        col.setBackground(states);
-
+        // No frame of its own: the launcher's glass highlight, the one the app tiles use, sits over the focused poster.
         FrameLayout frame = new FrameLayout(activity);
+        float radius = AppAdapter.cornerRadius(w, d);
         GradientDrawable placeholder = new GradientDrawable();
         placeholder.setColor(0xFF222222);
-        placeholder.setCornerRadius(px(8));
+        placeholder.setCornerRadius(radius);
         frame.setBackground(placeholder);
         frame.setClipToOutline(true);
         ImageView image = new ImageView(activity);
@@ -273,11 +364,31 @@ final class ContinueRow {
                     Gravity.BOTTOM | Gravity.START));
         }
         col.addView(frame, new LinearLayout.LayoutParams(w, h));
-        col.addView(line(e.title, 15, 0xFFFFFFFF, w, px(4)));
-        col.addView(line(e.subtitle, 12, 0xFF9AA0A6, w, 0));
+        TextView title = line(e.title, 15, themeColor(R.attr.homeText), w, px(4));
+        TextView subtitle = line(e.subtitle, 12, themeColor(R.attr.homeText) == 0xFFFFFFFF ? 0xFF9AA0A6 : themeColor(R.attr.homeTextMid), w, 0);
+        col.addView(title);
+        col.addView(subtitle);
 
         col.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus) reveal(v);
+            Motion.zoom(frame, hasFocus, animations, reducedMotion, advancedEffects, overshoot);
+            // The text steps down out of the zoomed poster's way, as an app tile's name does.
+            float down = hasFocus && animations ? 8 * d : 0f;
+            title.animate().cancel();
+            subtitle.animate().cancel();
+            if (reducedMotion || !animations) {
+                title.setTranslationY(down);
+                subtitle.setTranslationY(down);
+            } else {
+                title.animate().translationY(down).setDuration(220).start();
+                subtitle.animate().translationY(down).setDuration(220).start();
+            }
+            if (hasFocus) {
+                focusedCard = v;
+                reveal(v);
+                notifyFocused(v);
+            } else if (focusedCard == v) {
+                focusedCard = null;
+            }
         });
         col.setOnClickListener(v -> launch(e));
         col.setOnKeyListener((v, keyCode, event) -> {
@@ -299,6 +410,15 @@ final class ContinueRow {
             }
         });
         return col;
+    }
+
+    /** Tells the launcher where the poster of this card is, in root coordinates and without its zoom. */
+    private void notifyFocused(View card) {
+        View frame = ((ViewGroup) card).getChildAt(0);
+        float cx = box.getX() + scroll.getLeft() - scroll.getScrollX() + cards.getLeft() + card.getLeft()
+                + frame.getLeft() + frame.getWidth() / 2f;
+        float cy = box.getY() + scroll.getTop() + cards.getTop() + card.getTop() + frame.getTop() + frame.getHeight() / 2f;
+        host.onCardFocused(cx, cy, frame.getWidth(), frame.getHeight(), AppAdapter.cornerRadius(frame.getWidth(), d));
     }
 
     /** Scrolls just enough that the card's poster sits between the grid's first and last tile edges. */

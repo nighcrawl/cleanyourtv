@@ -41,6 +41,8 @@ final class Config {
     static final String WALLPAPER_NAME = "wallpaper.jpg";
     static final String SETTINGS_NAME = "launcher_settings";
     static final String ROWS_BELOW_DOCK_KEY = "rows_below_dock";
+    /** The number of cards across in Continue watching chosen in Launcher settings. */
+    static final String CONTINUE_COLUMNS_KEY = "continue_columns";
     static final String WALLPAPER_CHOICE_KEY = "wallpaper_choice";
     static final String DOCK_OPACITY_KEY = "dock_opacity";
     /**
@@ -48,6 +50,9 @@ final class Config {
      * resume when it differs, however the settings were left (see MainActivity#onResume).
      */
     static final String SETTINGS_REVISION_KEY = "settings_revision";
+    /** The on-TV choice of a packed theme (Launcher settings, Theme); it wins over a pushed config.json until Follow theme. */
+    static final String THEME_PRESET_KEY = "theme_preset";
+    private static final String PRESETS_DIR = "themes";
 
     /** True when Launcher settings changed something since Home was built at revision {@code seen}. */
     static boolean settingsChanged(long seen, long current) {
@@ -109,6 +114,8 @@ final class Config {
     final boolean settingsDropdown;
     /** A Continue watching row above the dock, from the Reprendre app (config.xml, continue_row). */
     final boolean continueRow;
+    /** Cards across in the Continue watching row, 2 to 5 (config.xml, continue_columns); Launcher settings can change it. */
+    final int continueColumns;
     /** Names under every tile, dimmed until focused (config.xml always_show_names); the dock band grows for them. */
     final boolean alwaysShowNames;
     /** Reorder button in the top bar (config.xml reorder_button); the Settings long-press menu offers it either way. */
@@ -230,6 +237,12 @@ final class Config {
     final boolean showGreeting;
     /** The date and the line between it and the clock in the clock's full white instead of dimmed (config.xml, header_white). */
     final boolean headerWhite;
+    /** Home turns light by day and dark at night, with the real sun (config.xml, auto_theme); false stays dark. */
+    final boolean autoTheme;
+    /** Launcher settings has a Theme row to pick a packed theme on the TV (config.xml, theme_picker). */
+    final boolean themePicker;
+    /** The background colour by day when autoTheme is on (config.json, day_background_color); background_color is the night's. */
+    final int dayBackgroundColor;
     /** The clock screensaver over Home's wallpaper instead of the black glow (config.xml, clock_wallpaper). */
     final boolean clockWallpaper;
     /** How dark the clock screensaver's wallpaper is, 0 to 90 % (config.xml, clock_wallpaper_dim). */
@@ -254,7 +267,7 @@ final class Config {
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, boolean ambientGlow, boolean appGlow, boolean fadeRows, int homeIdleClockMinutes,
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
-                   Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset) {
+                   Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean autoTheme, int dayBackgroundColor, boolean themePicker, int continueColumns) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -284,6 +297,9 @@ final class Config {
         this.shamsiDate = shamsiDate;
         this.lunarDate = lunarDate;
         this.lunarUtcOffset = lunarUtcOffset;
+        this.autoTheme = autoTheme;
+        this.themePicker = themePicker;
+        this.dayBackgroundColor = dayBackgroundColor;
         this.greetingName = greetingName;
         this.moduleCards = moduleCards;
         this.reducedMotion = reducedMotion;
@@ -295,6 +311,7 @@ final class Config {
         this.launcherSettingsButton = launcherSettingsButton;
         this.settingsDropdown = settingsDropdown;
         this.continueRow = continueRow;
+        this.continueColumns = continueColumns;
         this.reorderButton = reorderButton;
         this.showNetworkPill = showNetworkPill;
         this.showInputsPill = showInputsPill;
@@ -409,6 +426,7 @@ final class Config {
         boolean launcherSettingsButton = res.getBoolean(R.bool.launcher_settings_button);
         boolean settingsDropdown = res.getBoolean(R.bool.settings_dropdown);
         boolean continueRow = res.getBoolean(R.bool.continue_row);
+        int continueColumns = res.getInteger(R.integer.continue_columns);
         boolean reorderButton = res.getBoolean(R.bool.reorder_button);
         boolean showNetworkPill = res.getBoolean(R.bool.show_network_pill);
         boolean showInputsPill = res.getBoolean(R.bool.show_inputs_pill);
@@ -457,6 +475,8 @@ final class Config {
         List<String> topBarApps = new ArrayList<>(Arrays.asList(res.getStringArray(R.array.top_bar_apps)));
         boolean showGreeting = res.getBoolean(R.bool.show_greeting);
         boolean headerWhite = res.getBoolean(R.bool.header_white);
+        boolean autoTheme = res.getBoolean(R.bool.auto_theme);
+        int dayBackground = 0xFFE9EDF3;
         boolean clockWallpaper = res.getBoolean(R.bool.clock_wallpaper);
         int clockWallpaperDim = res.getInteger(R.integer.clock_wallpaper_dim);
         boolean clockGlow = res.getBoolean(R.bool.clock_glow);
@@ -469,6 +489,14 @@ final class Config {
         File file = dir != null ? new File(dir, FILE_NAME) : null;
         boolean mounted = Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState());
         JSONObject json = readOverlay(ctx, file, mounted);
+        // A theme push or reset invalidates choices made on the TV. On first use, remember the
+        // current theme without clearing choices from an older launcher version.
+        SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        // Unmounted storage looks like a theme reset; compare only once the file is readable.
+        if (mounted) syncThemeChoices(choices, dir, file);
+        boolean themePicker = res.getBoolean(R.bool.theme_picker) || json != null && bool(json, "theme_picker", false);
+        JSONObject preset = readPreset(ctx, choices.getString(THEME_PRESET_KEY, null));
+        if (preset != null) json = preset;
         if (json != null) {
             applied = true;
             dock = stringList(json, "dock_apps", dock);
@@ -505,6 +533,7 @@ final class Config {
             launcherSettingsButton = bool(json, "launcher_settings_button", launcherSettingsButton);
             settingsDropdown = bool(json, "settings_dropdown", settingsDropdown);
             continueRow = bool(json, "continue_row", continueRow);
+            continueColumns = integer(json, "continue_columns", continueColumns, 2, 5);
             reorderButton = bool(json, "reorder_button", reorderButton);
             showNetworkPill = bool(json, "show_network_pill", showNetworkPill);
             showInputsPill = bool(json, "show_inputs_pill", showInputsPill);
@@ -553,6 +582,8 @@ final class Config {
             topBarApps = stringList(json, "top_bar_apps", topBarApps);
             showGreeting = bool(json, "show_greeting", showGreeting);
             headerWhite = bool(json, "header_white", headerWhite);
+            autoTheme = bool(json, "auto_theme", autoTheme);
+            dayBackground = color(json, "day_background_color", dayBackground);
             clockWallpaper = bool(json, "clock_wallpaper", clockWallpaper);
             clockWallpaperDim = integer(json, "clock_wallpaper_dim", clockWallpaperDim, 0, 90);
             clockGlow = bool(json, "clock_glow", clockGlow);
@@ -563,13 +594,10 @@ final class Config {
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
-        // A theme push or reset invalidates choices made on the TV. On first use, remember the
-        // current theme without clearing choices from an older launcher version.
-        SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
-        // Unmounted storage looks like a theme reset; compare only once the file is readable.
-        if (mounted) syncThemeChoices(choices, dir, file);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
+        int chosenContinue = choices.getInt(CONTINUE_COLUMNS_KEY, continueColumns);
+        if (chosenContinue >= 2 && chosenContinue <= 5) continueColumns = chosenContinue;
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
@@ -615,7 +643,7 @@ final class Config {
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, restoreKeyServices, wallpaperEnabled, wallpaper,
                 wallpapers, rotationMinutes, wallpaperDim, dockOpacity, wallpaperOrder, applied,
                 festival, inputKeycodes, appKeys, stockHomeRedirect, json == null ? Collections.emptyList() : raceCalendar(json), cinematic, ambientGlow, appGlow, fadeRows,
-                Math.max(0, idleClockMinutes), keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding, cinematicDots, cinematicWhiteFocus, wifiStatusColor, cinematicScrim, cinematicArt, wallpaperMoods, gamepadPassthrough, consumeVolumeKeys, wifiStatusWarnings, topBarApps, showGreeting, headerWhite, clockWallpaper, Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset);
+                Math.max(0, idleClockMinutes), keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding, cinematicDots, cinematicWhiteFocus, wifiStatusColor, cinematicScrim, cinematicArt, wallpaperMoods, gamepadPassthrough, consumeVolumeKeys, wifiStatusWarnings, topBarApps, showGreeting, headerWhite, clockWallpaper, Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset, autoTheme, dayBackground, themePicker, Math.max(2, Math.min(5, continueColumns)));
     }
 
     /**
@@ -659,12 +687,39 @@ final class Config {
             SharedPreferences.Editor editor = choices.edit();
             if (!"absent".equals(token)) editor.remove("columns").remove("animations")
                     .remove("advanced_effects").remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY)
-                    .remove(DOCK_OPACITY_KEY);
+                    .remove(DOCK_OPACITY_KEY).remove(THEME_PRESET_KEY).remove(CONTINUE_COLUMNS_KEY);
             editor.putString(THEME_SIGNATURE_KEY, signature).commit();
         } else if (!seen.equals(signature)) {
             choices.edit().remove("columns").remove("animations").remove("advanced_effects")
                     .remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY).remove(DOCK_OPACITY_KEY)
-                    .putString(THEME_SIGNATURE_KEY, signature).commit();
+                    .remove(THEME_PRESET_KEY).remove(CONTINUE_COLUMNS_KEY).putString(THEME_SIGNATURE_KEY, signature).commit();
+        }
+    }
+
+    /** The names of the themes packed into the APK (themes/&lt;name&gt;/config.json in its assets), in alphabetical order. */
+    static List<String> presets(Context ctx) {
+        try {
+            String[] names = ctx.getAssets().list(PRESETS_DIR);
+            if (names == null) return new ArrayList<>();
+            List<String> list = new ArrayList<>(Arrays.asList(names));
+            java.util.Collections.sort(list);
+            return list;
+        } catch (IOException e) {
+            return new ArrayList<>();
+        }
+    }
+
+    /** A packed theme's config.json, or null for no name, an unknown one or a file that does not parse. */
+    private static JSONObject readPreset(Context ctx, String name) {
+        if (name == null || !presets(ctx).contains(name)) return null;
+        try (InputStream in = ctx.getAssets().open(PRESETS_DIR + "/" + name + "/" + FILE_NAME)) {
+            byte[] buf = new byte[in.available()];
+            int n = 0, r;
+            while (n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
+            return new JSONObject(new String(buf, 0, n, StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            Log.w(TAG, "ignoring packed theme " + name + ": " + e.getMessage());
+            return null;
         }
     }
 

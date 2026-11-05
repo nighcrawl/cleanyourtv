@@ -214,6 +214,16 @@
     <!-- The date and the line between the clock and the date in the clock's full white instead of dimmed. Can also be
          set with "header_white" in a theme. -->
     <bool name="header_white">false</bool>
+    <!-- Home by day: with the sun up (sunrise and sunset from latitude and longitude below, 07:30 and 19:00 without
+         them) Home uses a light look, dark text over the "day_background_color" of a theme's config.json
+         (#E9EDF3 by default), and goes back to the dark one at sunset. Home only: Settings and the menus stay dark.
+         Off by default; a theme can set "auto_theme": true. -->
+    <bool name="auto_theme">false</bool>
+    <!-- A "Theme" row in Launcher settings: pick, on the TV, one of the themes packed into the app (default, frost,
+         six-columns: the ones that are only a config.json) instead of pushing it from a computer. The pick wins until
+         Follow theme or the next theme push. Themes with pictures still go through tools/theme.sh. Off by default;
+         a pushed theme can set "theme_picker": true. -->
+    <bool name="theme_picker">false</bool>
     <!-- Optional VPN app the network pill opens (hold the pill for Wi-Fi settings), e.g. the package of the
          VPN you use. Empty: the pill opens Wi-Fi settings. The green VPN badge shows for any VPN either way;
          with an app set here, a red "VPN off" badge also shows while no VPN is up. -->
@@ -341,6 +351,9 @@
          provider tv.reprendre.items, which also fetches the posters: the launcher itself keeps no network access
          and no extra permission. Hidden while that app is not installed. Off by default. -->
     <bool name="continue_row">true</bool>
+    <!-- Cards across in that row, 2 to 5 (3 by default); the posters are always 16:9. Launcher settings can change it
+         on the TV. Where the room above the dock is short, more cards fit across than asked for. -->
+    <integer name="continue_columns">3</integer>
 
     <!-- Module cards: an app that declares a card (docs/specs/card.md) can stand in for its tile with its own
          label, caption and glow colour, once you answer Show on the prompt. false: never look for cards or ask. -->

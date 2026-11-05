@@ -26,6 +26,10 @@ the rules. Keys from before this rule are on its wanted list; a screenshot for o
 | `glass_style` | <img src="switches/glass_style.jpg" width="320" alt="glass_style halo on a TV"> |
 | `sky_intensity` | <img src="sky-sunset.jpg" width="320" alt="sky_intensity on a TV"> |
 | `wallpaper_rotation_minutes` | <img src="../themes/scenes/screenshot.jpg" width="320" alt="wallpaper_rotation_minutes on a TV"> |
+| `auto_theme` | <img src="../themes/frost/screenshot.jpg" width="320" alt="auto_theme on a TV"> |
+| `day_background_color` | <img src="../themes/frost/screenshot.jpg" width="320" alt="day_background_color on a TV"> |
+| `theme_picker` | <img src="switches/theme_picker.jpg" width="320" alt="theme_picker on a TV"> |
+| `continue_columns` | <img src="switches/continue_columns.jpg" width="320" alt="continue_columns on a TV"> |
 | `festival` | <img src="../themes/dussehra/screenshot.jpg" width="320" alt="festival on a TV"> |
 | `settings_key_panel` | <img src="quick-settings-panel.jpg" width="320" alt="settings_key_panel on a TV"> |
 | `home_idle_clock_minutes` | <img src="clock-screensaver.png" width="320" alt="home_idle_clock_minutes on a TV"> |

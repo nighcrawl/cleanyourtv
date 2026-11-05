@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home's text colours, one per strength of the white it uses at night; Theme.TvHome.Day (auto_theme) swaps them for dark ink. -->
+<resources>
+    <attr name="homeText" format="color" />
+    <attr name="homeTextHigh" format="color" />
+    <attr name="homeTextMid" format="color" />
+    <attr name="homeTextLow" format="color" />
+    <attr name="homeDivider" format="color" />
+</resources>
