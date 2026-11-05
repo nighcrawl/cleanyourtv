@@ -13,6 +13,7 @@
      line (`values-de`, `values-es`, `values-b+es+419`, `values-ast`, `values-pt`, `values-ru` and
      `values-uk` set it), and `rtl_app_grid`/`rtl_menu_bar` true for a right-to-left language
      (`values-iw`).
+   - `continue_row.xml`: `continue_row_title`, the heading of the Continue watching row (`values-fr` sets it).
    - `fonts.xml`: point `font_body`, `font_regular` and the other `font_*` at the system families when the
      bundled Outfit has no glyphs for the language's letters (`values-vi`, #833).
    - `lunar.xml`: the lunar date format, the leap-month wording and the stem and branch names, for a
