@@ -29,10 +29,10 @@ final class Motion {
      * the timing and bounce each mode allows. The glass highlight and the name are the caller's.
      */
     static void zoom(View v, boolean focused, boolean animations, boolean reducedMotion, boolean advancedEffects,
-                     boolean overshoot) {
+                     boolean overshoot, boolean inDock) {
         float density = v.getResources().getDisplayMetrics().density;
         float s = focused ? focusScale(animations, advancedEffects) : 1f;
-        float lift = focused && advancedEffects ? -4f * density : 0f;
+        float lift = focused && advancedEffects && !inDock ? -4f * density : 0f;   // a dock tile stays on its band
         float elevation = focused && advancedEffects ? 8f * density : 0f;
         v.animate().cancel();
         if (!animations) {

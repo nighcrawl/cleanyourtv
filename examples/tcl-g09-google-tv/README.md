@@ -4,6 +4,10 @@ UK firmware `G09_4K_GB` (STT2.230203.001 AS24, Amlogic T5M, 2 GB RAM), set up in
 work on this set: the debloat list and the Clean Your TV launcher as Home. Tested on 19 October 2026,
 including a reboot.
 
+For the **55P7L on AS23**, see [the stock-home redirect route below](#tcl-55p7l-g09-as23-stock-home-redirect).
+That unit keeps Google TV's home and setup wizard enabled; its tested package choices differ from
+the AS24 list and install sequence that follow.
+
 | File | What it is |
 |---|---|
 | `debloat.txt` | The 35 packages that were disabled, grouped and commented |
@@ -65,13 +69,16 @@ back through the launcher's `InputKeyService`, which is why the install line abo
 **Ask for that only if you want the buttons more than a ramping volume.** Once a key-filtering service is
 bound, holding volume up/down moves one step instead of repeating, on the whole TV, and one helper or both
 makes no difference - see [the G09 key-repeat note](../../docs/devices/tcl-55p71b-g09-key-repeat.md) for the
-bisect and for the third option (leave launcherx enabled). The Input button below needs no helper.
+bisect and for the third option (leave launcherx enabled). On one AS24 unit `"consume_volume_keys": true`
+in `config.json` kept both; see [below](#input_key_service1-and-volume-repeat). The Input button below needs
+no helper.
 
 | Button | Keycode | Scancode | Note |
 |---|---|---|---|
 | Netflix | 4062 | 472 | `app_keys` |
 | Prime Video | 4099 | 473 | `app_keys` |
 | YouTube | 4065 | 569 | `app_keys` |
+| Sony LIV | 4166 | 641 | `app_keys`; on the India remote |
 | Disney+ | | | keeps working on its own |
 | TCL Channel | 4020 | 456 | opens `com.tcl.waterfall.overseas`, which the list disables; map it to any app you like |
 | Shield (TCL Guard) | 4140 | 660 | opens TGuard, which the list disables; free to map |
@@ -91,11 +98,86 @@ service stay bound with filtering off, which is the repeat-keeping half of that 
 [the unit's note](../../docs/devices/tcl-55p71b-pro-g09.md). The same unit also lost the volume beep for
 good when launcherx was disabled — re-enabling every debloated package did not bring it back.
 
+On a unit with firmware `STT2.230203.001.AS24` (`G09_4K_GB`, India, measured on 3 November 2026), the
+launcher's `consume_volume_keys` switch gave both. launcherx and setupwraith were disabled with this launcher as
+Home, `InputKeyService` was the only service bound, with key filtering on and `app_keys` mapping Netflix, Prime
+Video, YouTube and Sony LIV (table above) plus `83:settings` for the gear. That setup stepped once per press.
+With `"consume_volume_keys": true` added to `config.json` and pushed with `theme.sh`, the owner held Volume Up
+and Down on the real remote and both ramped, one tap still moved one step, and Netflix still opened. The
+helper swallows the volume keys and repeats a held one itself, so it needs `key_filter` left on. One unit:
+a reboot after the switch and a soundbar or eARC setup were not checked, and it was not tried on AS23. Details
+in [the key-repeat note](../../docs/devices/tcl-55p71b-g09-key-repeat.md#choices).
+
+## TCL 55P7L (G09, AS23): stock-home redirect
+
+An additional unit reported in [#2268](https://github.com/Gathin23/cleanyourtv/issues/2268): owner-reported
+TCL 55P7L, system model `Smart TV Pro`, device `G09`, Google TV / Android 12 (SDK 31), firmware
+`STT2.230203.001.AS23`. Tested on 27 October 2026 with launcher 3.1 built from
+`6ffa7fa5df7c38714cd89fd77fe636c53e759083`, including a reboot and physical remote checks.
+
+This unit uses the redirect route rather than disabling the stock home:
+
+- Keep `com.google.android.apps.tv.launcherx` and `com.google.android.tungsten.setupwraith` enabled.
+- Enable and bind CleanYourTV's `HomeKeyService`. No Projectivy accessibility service remained active.
+- Set `stock_home_redirect` to `com.google.android.apps.tv.launcherx` in `config.xml`.
+- Set `home_long_press_home=true` and `power_on_home_always=true` in the theme.
+- `APP_AUTO_START=allow` was also persisted for `com.gathin.tvhome` on this firmware.
+
+With `stock_home_redirect` alone, the helper stayed bound but Google TV's home remained on screen
+after reboot until CleanYourTV was opened manually. With both theme options added, CleanYourTV's
+`MainActivity` became the focused window after reboot without opening it manually. The two options
+were added together, not bisected separately; this records the working combination, not a claim
+about which option was necessary.
+
+The owner confirmed physical Home, Netflix, Prime Video, YouTube, TCL Channel, Settings and channels
+working. **Keep `com.tcl.waterfall.overseas` enabled if the dedicated TCL Channel button is wanted**:
+it was initially disabled, then re-enabled to recover that button. Disabling
+`com.google.android.videos` did not mean disabling the distinct Google TV home package `launcherx`.
+
+Volume repeat remains a tradeoff on this unit too. With key filtering active, holding Volume Up or
+Down changed one step per press. An earlier comparison with the stock home/setup wizard disabled
+and no accessibility helper restored repeat but lost several vendor shortcuts. The owner chose
+working shortcuts with stepwise volume and restored the stock packages. This is not a volume-repeat
+fix; see [the G09 key-repeat note](../../docs/devices/tcl-55p71b-g09-key-repeat.md).
+
+The 55P7L report recorded the following packages still disabled after reboot, using the project's
+guarded disable/restore tools. These are this owner's choices, not validation of the shared
+`debloat.txt` above for this unit:
+
+```text
+com.tcl.logkit
+com.google.android.feedback
+com.tcl.interactive
+com.tcl.tv.tclhome_passive
+com.tcl.messagebox
+com.google.android.videos
+com.google.android.play.games
+com.tcl.ocean.instructions
+com.tcl.exhibit
+com.tcl.hotelmenu
+```
+
+Voice assistants, casting, HDMI, tuner, keyboard, remote/Bluetooth, Play Store/Services and updates
+were preserved. The owner kept Netflix, YouTube, UniTV, Prime Video, F1 TV, Globoplay, YouTube Music,
+Moonlight and Downloader. No measured performance improvement is claimed.
+
 ## Notes for this set
 
 - The remote's Input button keeps working without Google TV's home: TCL draws that panel itself.
   `INPUT_KEY_SERVICE` is only needed for the app buttons above.
+- Also verified on `G09_4K_GB` with firmware `STT2.230203.001.AS24` in India with the same debloat list.
 - Same lists and buttons on a second unit with firmware STT2.230203.001 AS10 (G09_4K_GB_32BIT).
+- Also verified on a TCL 55V6C (product `G09_4K_GB_NF`, firmware `STT2.230203.001.AS24`) in Colombia,
+  including a reboot. This unit also ships `com.tcl.magiconnectfree` (MagiConnect, TCL's phone companion
+  app), which the list disables. If a TCL soundbar is connected over HDMI eARC, keep
+  `com.tcl.UpdatePeripheral` enabled so the soundbar gets firmware updates.
+- AS24 also loses volume repeat. On the 55V6C, with `HomeKeyService` and `InputKeyService` bound, the gear
+  and app buttons work, but holding volume up moves one step. Unbinding both restores the repeat.
+- On the 55V6C, the gear button does nothing after `build-and-install.sh` and works after the first restart,
+  with no helper bound. The Netflix, Prime Video, and YouTube buttons stay unmapped.
+- The 55V6C Wi-Fi is a MediaTek module on an internal USB 2.0 bus (`btmtk_usb`). Expect about 100 to
+  125 Mbps in both directions, which is enough for 4K. Speed tests in the TV's browser read lower because
+  the CPU limits them.
 - Firmware updates come through Play Services and are untouched.
 - Screenshots come out black while HDMI or Live TV is on screen; press Home first.
 - Switch USB debugging off when you're done; the launcher keeps working without it.
@@ -106,3 +188,29 @@ good when launcherx was disabled — re-enabling every debloated package did not
   `adb shell appops set com.android.tv.settings START_FOREGROUND ignore`. The service then runs as a plain
   one, TvSettings drops to cached and Android can reclaim it; TCL's quick menu (the remote's Menu key)
   still opens. Undo with `allow` instead of `ignore`. Details in #887.
+
+### UI animation scaling (0.5x)
+
+On this 2 GB Amlogic T5M chipset, navigation and app-switching latency can be noticeably reduced by halving the default 1.0x animation scales:
+
+```bash
+TV_HOST=<tv-ip> tools/venv/bin/python -I tools/tv.py 'settings put global window_animation_scale 0.5'
+TV_HOST=<tv-ip> tools/venv/bin/python -I tools/tv.py 'settings put global transition_animation_scale 0.5'
+TV_HOST=<tv-ip> tools/venv/bin/python -I tools/tv.py 'settings put global animator_duration_scale 0.5'
+```
+
+To reset to default 1.0x:
+
+```bash
+TV_HOST=<tv-ip> tools/venv/bin/python -I tools/tv.py 'settings put global window_animation_scale 1.0'
+TV_HOST=<tv-ip> tools/venv/bin/python -I tools/tv.py 'settings put global transition_animation_scale 1.0'
+TV_HOST=<tv-ip> tools/venv/bin/python -I tools/tv.py 'settings put global animator_duration_scale 1.0'
+```
+
+### Stock YouTube RAM reclamation
+
+If you replace the stock YouTube app with an alternative client like SmartTube (`org.smarttube.stable`, ~75 MB RAM), disabling stock `com.google.android.youtube.tv` reclaims nearly ~500 MB of RAM (~395 MB app process + ~100 MB recommendation worker) on this 2 GB set:
+
+```bash
+TV_HOST=<tv-ip> tools/venv/bin/python -I tools/tv.py 'pm disable-user --user 0 com.google.android.youtube.tv'
+```

@@ -370,7 +370,7 @@ final class ContinueRow {
         col.addView(subtitle);
 
         col.setOnFocusChangeListener((v, hasFocus) -> {
-            Motion.zoom(frame, hasFocus, animations, reducedMotion, advancedEffects, overshoot);
+            Motion.zoom(frame, hasFocus, animations, reducedMotion, advancedEffects, overshoot, false);
             // The text steps down out of the zoomed poster's way, as an app tile's name does.
             float down = hasFocus && animations ? 8 * d : 0f;
             title.animate().cancel();

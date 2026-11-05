@@ -10,8 +10,8 @@ import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
-import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import java.io.File;
@@ -21,12 +21,19 @@ import java.util.List;
 
 /** Remote-friendly settings owned by the launcher; system settings stay one row away. */
 public final class LauncherSettingsActivity extends Activity {
+    @Override
+    protected void attachBaseContext(android.content.Context base) {
+        super.attachBaseContext(LauncherLocale.wrap(base));   // locale
+    }
+
     static final String EXTRA_REORDER = "com.gathin.tvhome.extra.REORDER_FROM_SETTINGS";
     private SharedPreferences choices;
     private final TextView[] columnChoices = new TextView[4];
     private final TextView[] rowChoices = new TextView[4];
     private static final int[] DOCK_OPACITIES = {100, 70, 50, 30};
     private final TextView[] dockChoices = new TextView[DOCK_OPACITIES.length];
+    private static final String[] CLOCK_FORMATS = {"system", "12", "24"};
+    private final TextView[] clockChoices = new TextView[CLOCK_FORMATS.length];
     private TextView wallpaperChoice;
     private TextView animationsChoice;
     private TextView advancedChoice;
@@ -38,6 +45,7 @@ public final class LauncherSettingsActivity extends Activity {
     private int continueColumns;
     private final TextView[] continueChoices = new TextView[4];
     private int dockOpacity;
+    private String clockFormat;
     private boolean animations;
     private boolean advancedEffects;
 
@@ -57,6 +65,7 @@ public final class LauncherSettingsActivity extends Activity {
         rowsBelowDock = config.rowsBelowDock;
         continueColumns = config.continueColumns;
         dockOpacity = config.dockOpacity;
+        clockFormat = config.clockFormat;
         animations = config.animations;
         advancedEffects = config.animations && config.advancedEffects;
 
@@ -112,12 +121,27 @@ public final class LauncherSettingsActivity extends Activity {
                 refresh();
             });
         }
-        // Keep the numeric choices increasing in the Hebrew reading direction. Reorder the
-        // actual views so D-pad focus follows their positions without changing the saved values.
+        int[] clockIds = {R.id.clockSystem, R.id.clock12, R.id.clock24};
+        for (int i = 0; i < clockIds.length; i++) {
+            final String value = CLOCK_FORMATS[i];
+            clockChoices[i] = findViewById(clockIds[i]);
+            clockChoices[i].setOnClickListener(v -> {
+                if (value.equals(clockFormat)) return;
+                clockFormat = value;
+                choices.edit().putString(Config.CLOCK_FORMAT_KEY, value).apply();
+                changed();
+                refresh();
+            });
+        }
+        // Mirror text alignment without globally opting the launcher into RTL. Numeric rows
+        // still need explicit ordering in Android's no-supportsRtl compatibility mode.
+        if (getResources().getBoolean(R.bool.rtl_menu_bar))
+            findViewById(android.R.id.content).setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         if (getResources().getBoolean(R.bool.rtl_app_grid)) {
             reverseRow(columnChoices);
             reverseRow(rowChoices);
             reverseRow(dockChoices);
+            reverseRow(clockChoices);
             reverseRow(continueChoices);
         }
         wallpaperChoice = findViewById(R.id.wallpaperChoice);
@@ -159,16 +183,14 @@ public final class LauncherSettingsActivity extends Activity {
             if (!hasOnTvChoices()) return;
             choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
                     .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
-                    .remove(Config.DOCK_OPACITY_KEY).remove(OpenOnStart.KEY).remove(Config.THEME_PRESET_KEY)
-                    .remove(Config.CONTINUE_COLUMNS_KEY).commit();
+                    .remove(Config.DOCK_OPACITY_KEY).remove(Config.CLOCK_FORMAT_KEY).remove(OpenOnStart.KEY)
+                    .remove(Config.THEME_PRESET_KEY).remove(Config.CONTINUE_COLUMNS_KEY).commit();
             reloadFromConfig();
             changed();
             refresh();
         });
-        findViewById(R.id.defaultHomeChoice).setOnClickListener(v -> {
-            Toast.makeText(this, R.string.home_settings_help, Toast.LENGTH_LONG).show();
-            open(new Intent(Settings.ACTION_HOME_SETTINGS));
-        });
+        findViewById(R.id.defaultHomeChoice).setOnClickListener(v ->
+                open(new Intent(this, HomeSettingsActivity.class)));
         findViewById(R.id.tvSettingsChoice).setOnClickListener(v ->
                 open(SystemSettings.intent(this, Settings.ACTION_SETTINGS)));
         refresh();
@@ -182,6 +204,7 @@ public final class LauncherSettingsActivity extends Activity {
         columns = current.columns;
         rowsBelowDock = current.rowsBelowDock;
         continueColumns = current.continueColumns;
+        clockFormat = current.clockFormat;
         dockOpacity = current.dockOpacity;
         animations = current.animations;
         advancedEffects = current.animations && current.advancedEffects;
@@ -204,7 +227,7 @@ public final class LauncherSettingsActivity extends Activity {
                     // The layout and motion choices belong to the theme they were made on.
                     choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
                             .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
-                            .remove(Config.DOCK_OPACITY_KEY).remove(Config.CONTINUE_COLUMNS_KEY).commit();
+                            .remove(Config.DOCK_OPACITY_KEY).remove(Config.CLOCK_FORMAT_KEY).remove(Config.CONTINUE_COLUMNS_KEY).commit();
                     reloadFromConfig();
                     changed();
                     refresh();
@@ -341,6 +364,9 @@ public final class LauncherSettingsActivity extends Activity {
         for (int i = 0; i < dockChoices.length; i++) {
             dockChoices[i].setSelected(dockOpacity == DOCK_OPACITIES[i]);
         }
+        for (int i = 0; i < clockChoices.length; i++) {
+            clockChoices[i].setSelected(CLOCK_FORMATS[i].equals(clockFormat));
+        }
         animationsChoice.setText(getString(R.string.animations_state,
                 getString(animations ? R.string.on : R.string.off)));
         advancedChoice.setText(getString(R.string.advanced_effects_state,
@@ -362,8 +388,8 @@ public final class LauncherSettingsActivity extends Activity {
         return choices.contains("columns") || choices.contains(Config.ROWS_BELOW_DOCK_KEY)
                 || choices.contains("animations") || choices.contains("advanced_effects")
                 || choices.contains(Config.WALLPAPER_CHOICE_KEY) || choices.contains(Config.DOCK_OPACITY_KEY)
-                || choices.contains(OpenOnStart.KEY) || choices.contains(Config.THEME_PRESET_KEY)
-                || choices.contains(Config.CONTINUE_COLUMNS_KEY);
+                || choices.contains(Config.CLOCK_FORMAT_KEY) || choices.contains(OpenOnStart.KEY)
+                || choices.contains(Config.THEME_PRESET_KEY) || choices.contains(Config.CONTINUE_COLUMNS_KEY);
     }
 
     private void open(Intent intent) {
