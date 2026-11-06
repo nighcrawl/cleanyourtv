@@ -69,6 +69,8 @@ final class PicksHero {
     private final boolean fullBleed;
     /** Whether the Continue watching titles go in the banner too: not on the streaming home, which has its own row. */
     private final boolean includeContinue;
+    /** Whether the recommendations go in the banner: off, it shows only what was being watched. */
+    private final boolean includePicks;
     /** Height and top the banner is given in full-bleed mode (see {@link #showFixed}). */
     private int fixedTop, fixedHeight;
     private final FrameLayout box;
@@ -103,8 +105,14 @@ final class PicksHero {
     }
 
     PicksHero(Activity activity, FrameLayout root, float density, Host host, boolean fullBleed, boolean includeContinue) {
+        this(activity, root, density, host, fullBleed, includeContinue, true);
+    }
+
+    PicksHero(Activity activity, FrameLayout root, float density, Host host, boolean fullBleed, boolean includeContinue,
+              boolean includePicks) {
         this.fullBleed = fullBleed;
         this.includeContinue = includeContinue;
+        this.includePicks = includePicks;
         this.activity = activity;
         this.host = host;
         this.d = density;
@@ -378,7 +386,7 @@ final class PicksHero {
     private List<Entry> query() {
         List<Entry> list = new ArrayList<>();
         if (includeContinue) read(CONTINUE, true, MAX_CONTINUE, list);
-        read(PICKS, false, MAX_PICKS, list);
+        if (includePicks) read(PICKS, false, MAX_PICKS, list);
         return list;
     }
 
