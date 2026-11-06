@@ -220,7 +220,17 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final Set<String> iconTiles;
     private final List<Entry> items = new ArrayList<>();
 
+    /** Which tiles this adapter lists: all (the classic grid), only the dock apps, or only the others (streaming home's row). */
+    enum Slice { ALL, DOCK, REST }
+
+    private final Slice slice;
+
     AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg) {
+        this(ctx, listener, dockSize, cfg, Slice.ALL);
+    }
+
+    AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg, Slice slice) {
+        this.slice = slice;
         this.ctx = ctx;
         this.listener = listener;
         this.dockSize = dockSize;
@@ -231,13 +241,14 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.animations = cfg.animations;
         this.advancedEffects = cfg.animations && cfg.advancedEffects;
         this.showHomeSettings = cfg.showHomeSettingsShortcut;
-        this.showLibrary = LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill);
+        this.showLibrary = slice == Slice.ALL && LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill);
         this.reducedMotion = cfg.reducedMotion;
         this.focusOvershoot = cfg.focusOvershoot;
         this.rowsBelowDock = cfg.rowsBelowDock;
         this.dockTitle = cfg.dockTitle;
-        this.dockRow = cfg.dockRow;
-        this.singleRow = cfg.singleRow;
+        // The others' row is a plain sideways row: no dock band, no empty slots, no library pill.
+        this.dockRow = slice == Slice.REST ? false : cfg.dockRow;
+        this.singleRow = slice == Slice.REST ? true : cfg.singleRow;
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;
@@ -333,6 +344,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         }
         docked = 0;
         while (docked < fresh.size() && isDocked(fresh.get(docked))) docked++;
+        if (slice == Slice.DOCK) fresh = new ArrayList<>(fresh.subList(0, docked));
+        else if (slice == Slice.REST) {
+            fresh = new ArrayList<>(fresh.subList(docked, fresh.size()));
+            docked = 0;
+        }
         emptySlots = dockRow && !reordering ? DockSlots.empty(docked, dockSize, fresh.size(), fillDock) : 0;
         for (int i = 0; i < emptySlots; i++) {
             fresh.add(docked + i, new Entry(Entry.EMPTY, "", new ComponentName(ctx, "empty-dock-slot-" + i),

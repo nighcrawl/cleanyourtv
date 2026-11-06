@@ -145,6 +145,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private FrameLayout root;
     /** continue_row: what was being watched, above the dock; null when off. */
     private ContinueRow continueRow;
+    /** picks_hero: the Recommendations banner above it; null when off. */
+    private PicksHero picksHero;
+    /** home_layout streaming: the banner, the rows and the fixed dock; null in the classic layout. */
+    private StreamingHome streaming;
     /** settings_dropdown: the Settings button opens a list of the TV settings and the launcher settings. */
     private boolean settingsDropdown;
     private WallpaperPlayer wallpaperPlayer;
@@ -549,6 +553,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }, animations, reducedMotion, advancedEffects, focusOvershoot, cfg.continueColumns);
             glass.bringToFront();   // the highlight is drawn over the posters, as over the tiles
         }
+        if (cfg.picksHero && !cfg.streamingHome) {
+            picksHero = new PicksHero(this, root, density, new PicksHero.Host() {
+                @Override public void focusDock() { focusTile(lastFocused < COLUMNS ? lastFocused : 0); }
+                @Override public void focusTop() { firstTopButton().requestFocus(); }
+                @Override public void open(Intent intent) { MainActivity.this.open(intent); }
+            });
+            glass.bringToFront();
+        }
         // The hero is now a group (name, and the cinematic lines): without this every fade of the default
         // shelf would render it through an offscreen buffer first, as the glow above notes.
         hero.forceHasOverlappingRendering(false);
@@ -717,12 +729,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             grid.setLayoutAnimation(new LayoutAnimationController(
                     AnimationUtils.loadAnimation(this, R.anim.tile_enter), 0.06f));
         }
-        adapter = new AppAdapter(this, this, COLUMNS, cfg);
+        adapter = new AppAdapter(this, this, COLUMNS, cfg, cfg.streamingHome ? AppAdapter.Slice.DOCK : AppAdapter.Slice.ALL);
         dockApps = cfg.dockApps;
         fillDockLeavesSlots = !cfg.fillDock;
         Order savedOrder = Order.load(Order.file(this));
         adapter.setSavedOrder(Order.ranks(savedOrder, dockApps), Order.docked(savedOrder, dockApps));
         grid.setAdapter(adapter);
+        if (cfg.streamingHome) {
+            // The banner, the rows and the dock's room are laid out from fixed geometry; the dock stays this grid.
+            View header = findViewById(R.id.leftBlock);
+            while (header.getParent() != root) header = (View) header.getParent();
+            streaming = new StreamingHome(this, root, grid, header, density, cfg, COLUMNS, animations, reducedMotion,
+                    advancedEffects, focusOvershoot, new StreamingHome.Host() {
+                @Override public void focusDock() { focusTile(lastFocused < COLUMNS ? lastFocused : 0); }
+                @Override public void focusTop() { firstTopButton().requestFocus(); }
+                @Override public void open(Intent intent) { MainActivity.this.open(intent); }
+                @Override public void placeGlass(float cx, float cy, int w, int h, float radius) { placeGlassOver(cx, cy, w, h, radius); }
+                @Override public void openInput(String inputId) { onOpenInput(inputId); }
+            });
+            streaming.setSavedOrder(Order.ranks(savedOrder, dockApps), Order.docked(savedOrder, dockApps));
+            hero.setVisibility(View.GONE);   // the dock app's name has no place above a dock fixed at the bottom
+            root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> streaming.layout());
+        }
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
@@ -770,6 +798,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Cold start or column count > 4: the first focus can run before the grid has its final width or
             // padding, leaving the glass at the XML design size until a key is pressed.
             grid.post(this::refitGlass);
+            if (streaming != null) grid.post(streaming::layout);
         });
 
         // Keep the glass glued to its tile while the grid scrolls.
@@ -932,6 +961,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
+                if (streaming != null) {
+                    streaming.focusFromTop();
+                    return true;
+                }
                 focusTile(singleRow ? lastFocused : lastFocused % COLUMNS);
                 return true;
             }
@@ -962,7 +995,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
-            boolean onTile = newF != null && (newF.getId() == R.id.card || continueRow != null && continueRow.owns(newF));
+            boolean onTile = newF != null && (newF.getId() == R.id.card || continueRow != null && continueRow.owns(newF)
+                    || streaming != null && streaming.owns(newF));
             if (!onTile) hideGlass();
         });
 
@@ -1137,6 +1171,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         restartIdleClock();
         promptsPaused = false;
         if (continueRow != null) continueRow.refresh();
+        if (picksHero != null) picksHero.refresh();
+        if (streaming != null) streaming.refresh();
         if (grid.getAdapter() == null) grid.setAdapter(adapter);   // dropped by onTrimMemory
         switch (tileRefresh.onResume(packagesChangedSinceRebuild())) {
             case REBUILD:
@@ -1324,7 +1360,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0);
         cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, hiddenApps,
                 () -> Cards.load(Cards.storeFile(this)), leanback), none) : none;
-        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback);
+        List<Cards.Card> shownCards = cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none);
+        adapter.reload(shownCards, leanback);
+        if (streaming != null) streaming.reload(shownCards, leanback);
         lastFocusedKey = returnKey;
         lastFocused = returnSlot;
         packageSequence = currentPackageSequence(packageSequence);
@@ -1442,6 +1480,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (gameDay != null) gameDay.shutdown();
         unregisterReceiver(packageReceiver);
         if (continueRow != null) continueRow.close();
+        if (picksHero != null) picksHero.close();
+        if (streaming != null) streaming.close();
         if (openOnStartOnWake) unregisterReceiver(wakeReceiver);
         wallpaperPlayer.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
@@ -1740,6 +1780,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             Order order = new Order(Order.dockKey(dockApps), keys, docked);
             if (Order.save(Order.file(this), order)) {
                 adapter.setSavedOrder(Order.ranks(order, dockApps), Order.docked(order, dockApps));
+                if (streaming != null) streaming.setSavedOrder(Order.ranks(order, dockApps), Order.docked(order, dockApps));
             } else {
                 Toast.makeText(this, R.string.reorder_not_saved, Toast.LENGTH_SHORT).show();
             }
@@ -1999,16 +2040,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // ---- top shelf -------------------------------------------------------------------------------
 
     private void showHero(int position, float dockTopInRoot) {
+        if (streaming != null) return;   // the rows and the banner are laid out by StreamingHome, not by the focused dock app
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
-        if (continueRow != null) {
-            // The row may not cover the header (clock, date, top buttons): it starts under it.
+        if (continueRow != null || picksHero != null) {
+            // The rows may not cover the header (clock, date, top buttons): they start under it.
             View header = (View) clockBlock.getParent();
             Rect bar = headerRect;
             bar.set(0, 0, header.getWidth(), header.getHeight());
             root.offsetDescendantRectToMyCoords(header, bar);
-            continueRow.show(y, dockTopInRoot, bar.bottom + 4 * density);
+            if (continueRow != null) continueRow.show(y, dockTopInRoot, bar.bottom + 4 * density);
+            if (picksHero != null) picksHero.show(y, bar.bottom + 4 * density);
         }
         boolean changed = !label.contentEquals(heroName.getText());
         if (cinematic && heroArtAlpha > 0f) showHeroArt(position);
@@ -2288,6 +2331,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     private void showGlowOnly(int position) {
         if (continueRow != null) continueRow.hide();
+        if (picksHero != null) picksHero.hide();
         int color = adapter.ambientColorAt(position);
         stopAmbientAnimation();
         hero.animate().cancel();
@@ -2528,7 +2572,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public boolean onTileVerticalKey(int position, int keyCode) {
         int count = adapter.appCount();
         int target;
-        if (continueRow != null && keyCode == KeyEvent.KEYCODE_DPAD_UP && position < COLUMNS && continueRow.focusFirst()) return true;
+        if (streaming != null && (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) {
+            // The dock is the only row of the grid view here: Up goes to the rows above it, Down has nowhere to go.
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) streaming.focusAboveDock();
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP && position < COLUMNS
+                && (continueRow != null && continueRow.focusFirst() || picksHero != null && picksHero.focus())) return true;
         if (singleRow) {
             // One row: Up leaves for the top bar, Down has nowhere to go, and Left/Right walk the whole row,
             // stopping at its two ends (the default focus search scrolls the row to the next tile).

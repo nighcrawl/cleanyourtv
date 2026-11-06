@@ -84,6 +84,8 @@ final class ContinueRow {
     private boolean loading;
     private boolean shown;
     private float heroTop, dockTop, topLimit;
+    /** Streaming home's fixed place (showAt); the height is 0 in the classic layout. */
+    private float fixedTop, fixedHeight;
     /** Poster height in px: always 16:9 of cardW. */
     private int posterH;
     /** The row fits between the top bar and the dock's name; false keeps it hidden instead of over the clock. */
@@ -236,6 +238,48 @@ final class ContinueRow {
         }
     }
 
+    /**
+     * Streaming home: the row sits at topY with availableH of room whatever has focus, and takes as many columns as that
+     * height needs (up to MAX_COLUMNS); with no room at all it stays hidden.
+     */
+    void showAt(float topY, float availableH) {
+        shown = true;
+        fixedTop = topY;
+        fixedHeight = availableH;
+        if (entries.isEmpty()) return;
+        int fixed = px(FIXED_DP);
+        int count = columnsChoice;
+        while (count < MAX_COLUMNS && widthFor(count) * 9 / 16 > availableH - fixed) count++;
+        fits = widthFor(count) * 9 / 16 <= availableH - fixed;
+        if (!fits) {
+            box.animate().cancel();
+            box.setAlpha(0f);
+            box.setVisibility(View.INVISIBLE);
+            return;
+        }
+        if (setColumns(count)) {
+            buildCards();
+            box.getLayoutParams().height = fixed + posterH;
+            box.requestLayout();
+        }
+        box.setY(topY);
+        if (box.getVisibility() != View.VISIBLE) {
+            box.setAlpha(0f);
+            box.setVisibility(View.VISIBLE);
+            box.animate().alpha(1f).setDuration(200).start();
+        }
+    }
+
+    /** Height of the row (heading, posters and names) with this many cards across. */
+    int heightFor(int columns) {
+        return px(FIXED_DP) + widthFor(columns) * 9 / 16;
+    }
+
+    /** The row's view, so the streaming home can order it under the clock and buttons. */
+    View view() {
+        return box;
+    }
+
     void hide() {
         shown = false;
         box.animate().cancel();
@@ -318,7 +362,8 @@ final class ContinueRow {
             hide();
             shown = true;   // still on the dock: a later refresh with rows can show it
         } else if (shown) {
-            show(heroTop, dockTop, topLimit);
+            if (fixedHeight > 0) showAt(fixedTop, fixedHeight);
+            else show(heroTop, dockTop, topLimit);
         }
     }
 

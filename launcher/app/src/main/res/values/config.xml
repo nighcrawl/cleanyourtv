@@ -451,6 +451,13 @@
     <!-- Cards across in that row, 2 to 5 (3 by default); the posters are always 16:9. Launcher settings can change it
          on the TV. Where the room above the dock is short, more cards fit across than asked for. -->
     <integer name="continue_columns">3</integer>
+    <!-- A large Recommendations banner above the dock, like the featured area of a streaming home: one title at a time
+         (a wide picture, its name, the service and a summary) that changes every few seconds; OK opens that service's
+         app, Left and Right change the title. The titles come from the TMDB Picks app's content provider
+         com.gathin.tmdbpicks.items, which also downloads the pictures, so the launcher itself keeps no network access
+         and no extra permission. Only titles included in a Netflix, Disney+, Prime Video or Canal+ subscription are
+         offered. Hidden while that app is not installed. -->
+    <bool name="picks_hero">true</bool>
     <!-- Packages the App library catalogue never offers, even with app_library on (config.xml
          library_excluded_apps, or a theme's config.json). Different from hidden_apps, which only keeps a
          package off Home while still listing it here: some boards hide a package because opening it is
@@ -555,6 +562,11 @@
          colour washes down from the top edge and fades to black, brightest along the top). The cinematic shelf
          keeps its own glow. Can also be set with "glow_style": "horizon" in a theme's config.json. -->
     <string name="glow_style" translatable="false">radial</string>
+    <!-- Home layout: "classic" (the grid with the dock) or "streaming": a full-bleed Recommendations banner from the
+         top edge of the screen with the clock and buttons over it, a row of Continue watching cards, a row of all the
+         other apps, and the favourites dock fixed at the bottom. Can also be set with "home_layout" in a theme's
+         config.json. Anything else means classic. -->
+    <string name="home_layout" translatable="false">streaming</string>
     <!-- The focus highlight's look: glass (the default: a translucent slab with a bright top sheen, a crisp rim and a
          faint outer glow), rim (the crisp rim alone, no sheen, fill or glow, for a quiet focus over a wallpaper) or
          halo (the rim with a lighter outer glow). Can also be set with "glass_style": "rim" in a theme's config.json. -->

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="continue_row_title">Reprendre la lecture</string>
+    <string name="picks_hero_title">Recommandations</string>
+    <string name="picks_watch">Regarder</string>
 </resources>

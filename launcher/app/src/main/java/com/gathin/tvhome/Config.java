@@ -131,6 +131,11 @@ final class Config {
     final boolean continueRow;
     /** Cards across in the Continue watching row, 2 to 5 (config.xml, continue_columns); Launcher settings can change it. */
     final int continueColumns;
+    /** home_layout streaming: full-bleed banner, Continue watching and all apps as rows, the dock fixed at the bottom. */
+    final boolean streamingHome;
+    static final String HOME_STREAMING = "streaming";
+    /** A large Recommendations banner above the dock, from the TMDB Picks add-on (config.xml, picks_hero). */
+    final boolean picksHero;
     /** Names under every tile, dimmed until focused (config.xml always_show_names); the dock band grows for them. */
     final boolean alwaysShowNames;
     /** Reorder button in the top bar (config.xml reorder_button); the Settings long-press menu offers it either way. */
@@ -309,7 +314,9 @@ final class Config {
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
-                   int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap, boolean settingsDropdown, boolean continueRow, int continueColumns, boolean autoTheme, int dayBackgroundColor, boolean themePicker) {
+                   int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap, boolean settingsDropdown, boolean continueRow, int continueColumns, boolean picksHero, boolean autoTheme, int dayBackgroundColor, boolean themePicker, String homeLayout) {
+        boolean streaming = HOME_STREAMING.equalsIgnoreCase(homeLayout == null ? "" : homeLayout.trim());
+        this.streamingHome = streaming;
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -335,7 +342,8 @@ final class Config {
         this.inputSources = Collections.unmodifiableList(inputSources);
         this.inputUriScheme = inputUriScheme;
         this.columns = columns;
-        this.rowsBelowDock = rowsBelowDock;
+        // streaming_home: the dock is the only row of the grid view, fixed at the bottom; the others have their own rows.
+        this.rowsBelowDock = streaming ? 0 : rowsBelowDock;
         this.animations = animations;
         this.advancedEffects = advancedEffects;
         this.shamsiDate = shamsiDate;
@@ -353,12 +361,14 @@ final class Config {
         this.bootToLiveTv = bootToLiveTv;
         this.openOnStartChoice = openOnStartChoice;
         this.dockTitle = dockTitle;
-        this.dockRow = dockRow;
+        this.dockRow = dockRow || streaming;
         this.topMenu = topMenu;
         this.launcherSettingsButton = launcherSettingsButton;
         this.settingsDropdown = settingsDropdown;
-        this.continueRow = continueRow;
+        // The banner starts with what was being watched, so the row of it would be a second copy in the same place.
+        this.continueRow = continueRow && !picksHero && !streaming;
         this.continueColumns = continueColumns;
+        this.picksHero = picksHero;
         this.reorderButton = reorderButton;
         this.showNetworkPill = showNetworkPill;
         this.showInputsPill = showInputsPill;
@@ -396,7 +406,7 @@ final class Config {
         this.overlayApplied = overlayApplied;
         this.festival = festival;
         this.raceCalendar = Collections.unmodifiableList(raceCalendar);
-        this.cinematicHome = cinematicHome;
+        this.cinematicHome = cinematicHome && !streaming;
         this.ambientGlow = ambientGlow;
         this.appGlow = appGlow;
         this.fadeRows = fadeRows;
@@ -427,7 +437,7 @@ final class Config {
         this.clockWallpaper = clockWallpaper;
         this.clockWallpaperDim = clockWallpaperDim;
         this.clockGlow = clockGlow;
-        this.singleRow = singleRow;
+        this.singleRow = singleRow && !streaming;
         this.dockBandAll = dockBandAll;
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
@@ -493,6 +503,7 @@ final class Config {
         boolean settingsDropdown = res.getBoolean(R.bool.settings_dropdown);
         boolean continueRow = res.getBoolean(R.bool.continue_row);
         int continueColumns = res.getInteger(R.integer.continue_columns);
+        boolean picksHero = res.getBoolean(R.bool.picks_hero);
         boolean reorderButton = res.getBoolean(R.bool.reorder_button);
         boolean showNetworkPill = res.getBoolean(R.bool.show_network_pill);
         boolean showInputsPill = res.getBoolean(R.bool.show_inputs_pill);
@@ -550,6 +561,7 @@ final class Config {
         int cinematicScrim = res.getInteger(R.integer.cinematic_scrim);
         Map<String, Set<String>> wallpaperMoods = moods(res.getString(R.string.wallpaper_moods));
         String glowStyle = res.getString(R.string.glow_style);
+        String homeLayout = res.getString(R.string.home_layout);
         boolean wifiStatusWarnings = res.getBoolean(R.bool.wifi_status_warnings);
         boolean dateBelowClock = res.getBoolean(R.bool.date_below_clock);
         boolean vpnPill = res.getBoolean(R.bool.vpn_pill);
@@ -620,6 +632,7 @@ final class Config {
             settingsDropdown = bool(json, "settings_dropdown", settingsDropdown);
             continueRow = bool(json, "continue_row", continueRow);
             continueColumns = integer(json, "continue_columns", continueColumns, 2, 5);
+            picksHero = bool(json, "picks_hero", picksHero);
             reorderButton = bool(json, "reorder_button", reorderButton);
             showNetworkPill = bool(json, "show_network_pill", showNetworkPill);
             showInputsPill = bool(json, "show_inputs_pill", showInputsPill);
@@ -692,6 +705,7 @@ final class Config {
             singleRow = bool(json, "single_row", singleRow);
             dockBandAll = bool(json, "dock_band_all", dockBandAll);
             glowStyle = string(json, "glow_style", glowStyle);
+            homeLayout = string(json, "home_layout", homeLayout);
             glassStyle = string(json, "glass_style", glassStyle);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
@@ -753,7 +767,7 @@ final class Config {
                 consumeVolumeKeys, powerOnHome, homeLongPressHome, wifiStatusWarnings, topBarApps, showGreeting, headerWhite, clockWallpaper,
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
-                Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap, settingsDropdown, continueRow, Math.max(2, Math.min(5, continueColumns)), autoTheme, dayBackground, themePicker);
+                Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap, settingsDropdown, continueRow, Math.max(2, Math.min(5, continueColumns)), picksHero, autoTheme, dayBackground, themePicker, homeLayout);
     }
 
     /**

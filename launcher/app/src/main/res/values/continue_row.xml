@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="continue_row_title" tools:ignore="MissingTranslation">Continue watching</string>
+    <string name="picks_hero_title" tools:ignore="MissingTranslation">Recommendations</string>
+    <string name="picks_watch" tools:ignore="MissingTranslation">Watch</string>
 </resources>
