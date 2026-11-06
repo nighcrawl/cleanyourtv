@@ -8,6 +8,7 @@ import android.graphics.Rect;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.List;
@@ -35,6 +36,11 @@ final class StreamingHome {
     /** Space between two rows, and the room an app tile's zoom and glass need above and below it. */
     private static final int GAP_DP = 10;
     private static final int ZOOM_ROOM_DP = 16;
+    /** Under the last row of apps: the zoom room plus the name shown under the focused tile (a 7dp gap and 22dp of text). */
+    private static final int BOTTOM_ROOM_DP = ZOOM_ROOM_DP + 32;
+    /** Space above the "All apps" title, below Continue watching, and the room the title itself takes. */
+    private static final int SECTION_GAP_DP = 24;
+    private static final int APPS_TITLE_DP = 26;
     /** The Continue watching row is laid out for this many cards across, the most it uses: its cards are then the shortest. */
     private static final int CONTINUE_COLUMNS = 6;
     /** Where the dock grid's tiles start from the screen edges: the header's 56dp plus the grid's own 10dp. */
@@ -56,6 +62,10 @@ final class StreamingHome {
     /** The Continue watching row under the dock; null when picks_hero is off, as the banner then shows those titles. */
     private final ContinueRow continueRow;
     private final RecyclerView appsRow;
+    /** Fades the dock out under the clock as the page scrolls up. */
+    private final TopFade dockFade;
+    /** The "All apps" heading above the grid, in the style of the Continue watching one; it scrolls with the page. */
+    private final TextView appsTitle;
     private final AppAdapter apps;
     private final Rect rect = new Rect();
     private final ValueAnimator slide = ValueAnimator.ofFloat(0f, 1f);
@@ -65,7 +75,7 @@ final class StreamingHome {
     private float page;
 
     // Geometry from layout(), in px.
-    private int restShift, appsTop, continueRowsTop;
+    private int restShift, appsTop, continueRowsTop, appsTitleTop, gridTop;
     private boolean haveApps;
     /** How far the apps grid has scrolled, from its own scroll events: computeVerticalScrollOffset reads wrong while the padding changes. */
     private int scrolled;
@@ -79,6 +89,7 @@ final class StreamingHome {
         this.root = root;
         this.grid = grid;
         this.d = density;
+        dockFade = TopFade.attachMoving(grid, 60 * density);
         this.columns = columns;
         this.clock = activity.findViewById(R.id.leftBlock);
         this.slides = animations && !reducedMotion;
@@ -142,7 +153,7 @@ final class StreamingHome {
         appsRow.setHasFixedSize(true);
         appsRow.setOverScrollMode(View.OVER_SCROLL_NEVER);
         int side = px(SIDE_DP);
-        appsRow.setPadding(side, px(ZOOM_ROOM_DP), side, px(ZOOM_ROOM_DP));
+        appsRow.setPadding(side, px(ZOOM_ROOM_DP), side, px(BOTTOM_ROOM_DP));
         appsRow.setAdapter(apps);
         appsRow.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(RecyclerView rv, int dx, int dy) {
@@ -151,6 +162,18 @@ final class StreamingHome {
             }
         });
         root.addView(appsRow, new FrameLayout.LayoutParams(-1, px(100), android.view.Gravity.TOP | android.view.Gravity.START));
+        appsTitle = new TextView(activity);
+        appsTitle.setText(R.string.apps_row_title);
+        appsTitle.setTextColor(themeColor(activity));
+        appsTitle.setTextSize(13);
+        appsTitle.setSingleLine(true);   // before setAllCaps: it replaces the transformation method
+        appsTitle.setAllCaps(true);
+        appsTitle.setTypeface(UiFont.get(activity, R.string.font_medium));
+        appsTitle.setLetterSpacing(0.12f);
+        appsTitle.setVisibility(View.INVISIBLE);
+        // Lines up with the Continue watching heading and the grid's first tile (about 8% of the width).
+        appsTitle.setPadding(Math.round(activity.getResources().getDisplayMetrics().widthPixels * 0.0805f), 0, 0, 0);
+        root.addView(appsTitle, new FrameLayout.LayoutParams(-1, -2, android.view.Gravity.TOP | android.view.Gravity.START));
         // The page is scrolled down exactly while focus is below the dock.
         root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus, newFocus) -> {
             if (newFocus == null) return;
@@ -173,10 +196,17 @@ final class StreamingHome {
 
         // Under the clock and the buttons, and under the glass: the banner and rows go before the header in the root.
         int at = root.indexOfChild(header);
-        for (View v : continueRow == null ? new View[]{banner.view(), appsRow} : new View[]{banner.view(), continueRow.view(), appsRow}) {
+        for (View v : continueRow == null ? new View[]{banner.view(), appsTitle, appsRow} : new View[]{banner.view(), continueRow.view(), appsTitle, appsRow}) {
             root.removeView(v);
             root.addView(v, at++);
         }
+    }
+
+    /** Home's mid text colour in the activity's theme: white at night, dark ink by day (auto_theme). */
+    private static int themeColor(Activity activity) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        activity.getTheme().resolveAttribute(R.attr.homeTextMid, value, true);
+        return value.data;
     }
 
     private int px(int dp) {
@@ -232,6 +262,9 @@ final class StreamingHome {
             dockTop = rect.top + grid.getPaddingTop() - px(6);
             dockBlock = px(100);
         }
+        rect.set(0, 0, grid.getWidth(), grid.getHeight());
+        root.offsetDescendantRectToMyCoords(grid, rect);
+        gridTop = rect.top;   // in the root, translations left out
         rect.set(0, 0, clock.getWidth(), clock.getHeight());
         root.offsetDescendantRectToMyCoords(clock, rect);
         appsTop = rect.bottom + px(4);
@@ -245,10 +278,12 @@ final class StreamingHome {
             continueRow.showAt(continueRowsTop, continueRow.heightFor(CONTINUE_COLUMNS));
             continueH = continueRow.shownHeight();
         }
-        int belowH = continueH > 0 ? continueH + gap : 0;
-        int pad = continueRowsTop - appsTop + belowH;
+        // The "All apps" title sits under Continue watching, with more room above it than between two rows.
+        int belowH = continueH > 0 ? continueH + px(SECTION_GAP_DP) : 0;
+        appsTitleTop = continueRowsTop + belowH;
+        int pad = continueRowsTop - appsTop + belowH + px(APPS_TITLE_DP);
         if (appsRow.getPaddingTop() != pad) {
-            appsRow.setPadding(appsRow.getPaddingLeft(), pad, appsRow.getPaddingRight(), px(ZOOM_ROOM_DP));
+            appsRow.setPadding(appsRow.getPaddingLeft(), pad, appsRow.getPaddingRight(), px(BOTTOM_ROOM_DP));
             // The grid keeps its first tile where it was when the padding changes: put it back under the new padding.
             if (appsRow.getFocusedChild() == null) appsRow.post(() -> ((GridLayoutManager) appsRow.getLayoutManager()).scrollToPositionWithOffset(0, 0));
         }
@@ -263,6 +298,7 @@ final class StreamingHome {
             appsRow.requestLayout();
         }
         appsRow.setVisibility(haveApps ? View.VISIBLE : View.INVISIBLE);
+        appsTitle.setVisibility(haveApps ? View.VISIBLE : View.INVISIBLE);
         int geometry = (dockTop * 31 + appsTop) * 31 + dockBlock;
         if (geometry != lastGeometry) {
             lastGeometry = geometry;
@@ -277,8 +313,15 @@ final class StreamingHome {
     private void applyPage() {
         float down = restShift * page;
         grid.setTranslationY(-(down + scrolled));
+        // The dock fades out as it goes up under the clock and buttons, instead of passing over them.
+        dockFade.setCut(grid, Math.round(appsTop - px(36) - (gridTop - down - scrolled)));   // the fade ends where the dock rests
         appsRow.setTranslationY(restShift * (1 - page));
         if (continueRow != null) continueRow.setPosition(continueRowsTop + restShift * (1 - page) - scrolled, appsTop);
+        // Cut under the header like the grid's tiles: the title scrolls up with the page and disappears under it.
+        float titleY = appsTitleTop + restShift * (1 - page) - scrolled;
+        appsTitle.setY(titleY);
+        int cut = Math.round(appsTop - titleY);
+        appsTitle.setClipBounds(cut > 0 ? new Rect(0, cut, appsTitle.getWidth(), appsTitle.getHeight()) : null);
         View focused = appsRow.getFocusedChild();
         View card = focused == null ? null : focused.findViewById(R.id.card);
         if (card != null && card.isFocused()) placeGlassOver(card);

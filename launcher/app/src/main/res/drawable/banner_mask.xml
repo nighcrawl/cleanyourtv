@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alpha mask for the banner picture: transparent on the left edge, opaque from 60% on. The ramp is a smoothstep, so the
+     fade is wide and has no visible edge. Only the alpha counts: FadeEdgeLayout multiplies the picture by it (DST_IN). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <path android:pathData="M0,0H100V100H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="100"
+                android:endY="0">
+                <item android:offset="0.0" android:color="#00FFFFFF" />
+                <item android:offset="0.1" android:color="#13FFFFFF" />
+                <item android:offset="0.2" android:color="#42FFFFFF" />
+                <item android:offset="0.3" android:color="#80FFFFFF" />
+                <item android:offset="0.4" android:color="#BDFFFFFF" />
+                <item android:offset="0.5" android:color="#ECFFFFFF" />
+                <item android:offset="0.6" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#FFFFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

@@ -109,10 +109,11 @@ final class ContinueRow {
         TextView heading = new TextView(activity);
         heading.setText(R.string.continue_row_title);
         heading.setTextColor(themeColor(R.attr.homeTextMid));
-        heading.setTextSize(15);
-        heading.setSingleLine(true);
+        heading.setTextSize(13);
+        heading.setSingleLine(true);   // before setAllCaps: it replaces the transformation method
+        heading.setAllCaps(true);
         heading.setTypeface(UiFont.get(activity, R.string.font_medium));
-        heading.setLetterSpacing(0.08f);
+        heading.setLetterSpacing(0.12f);
         // The grid's first and last tiles sit this far from the screen edges (about 8% of the width); the row lines up with them.
         screenW = activity.getResources().getDisplayMetrics().widthPixels;
         inset = Math.round(screenW * 0.0805f);

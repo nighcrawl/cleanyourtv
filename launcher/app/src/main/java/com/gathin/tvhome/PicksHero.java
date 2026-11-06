@@ -8,6 +8,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Outline;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
@@ -15,7 +16,14 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.StaticLayout;
+import android.text.TextPaint;
 import android.text.TextUtils;
+import android.text.style.AbsoluteSizeSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.MetricAffectingSpan;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -95,6 +103,8 @@ final class PicksHero {
     private long lastLoad = -REFRESH_MS;
     private boolean loading, shown, fits;
     private float heroTop, topLimit;
+    /** Width the title and summary lines break at: the text column less its paddings. */
+    private int textWidth;
 
     PicksHero(Activity activity, FrameLayout root, float density, Host host) {
         this(activity, root, density, host, false, true);
@@ -135,8 +145,11 @@ final class PicksHero {
         lower = picture();
         upper = picture();
         upper.setAlpha(0f);
-        box.addView(lower);
-        box.addView(upper);
+        // The picture sits on the right and fades into the banner's background on its left edge; the text is on the left.
+        FadeEdgeLayout art = new FadeEdgeLayout(activity, R.drawable.banner_mask);
+        art.addView(lower);
+        art.addView(upper);
+        box.addView(art, new FrameLayout.LayoutParams((int) ((screenW - 2 * inset) * 0.68f), -1, Gravity.END));
         // Dark from the left, where the text sits, and from the bottom: the text reads on any picture.
         View scrim = new View(activity);
         GradientDrawable side = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{fullBleed ? 0x99000000 : 0xE6000000, fullBleed ? 0x40000000 : 0x66000000, 0x00000000});
@@ -253,6 +266,7 @@ final class PicksHero {
         root.addView(box, new FrameLayout.LayoutParams(screenW - 2 * inset, px(MIN_HEIGHT_DP), Gravity.TOP | Gravity.START));
         box.setX(inset);
         if (fullBleed) column.setPadding(gridInset, px(16), px(32), px(16));
+        textWidth = (int) ((screenW - 2 * inset) * (fullBleed ? 0.5f : 0.55f)) - (fullBleed ? gridInset : px(32)) - px(32);
     }
 
     private ImageView picture() {
@@ -451,6 +465,59 @@ final class PicksHero {
         schedule();
     }
 
+    /**
+     * Fills the title, subtitle and summary. The text is anchored at the bottom, so a title on two lines would push the
+     * heading under the clock: when the subtitle fits after the title's last line it goes there, which keeps the summary's
+     * two lines; when it does not, the summary gives up one line instead.
+     */
+    private void showTexts(Entry e) {
+        String name = e.title == null ? "" : e.title;
+        String sub = e.subtitle == null ? "" : e.subtitle;
+        title.setText(name);
+        subtitle.setText(sub);
+        subtitle.setVisibility(View.VISIBLE);
+        summary.setText(e.summary);
+        summary.setMaxLines(2);
+        if (lineCount(name) < 2) return;
+        if (!sub.isEmpty()) {
+            SpannableStringBuilder both = new SpannableStringBuilder(name).append("   ");
+            int from = both.length();
+            both.append(sub);
+            // Looks like the subtitle on its own line: its size, colour and typeface rather than the title's.
+            both.setSpan(new FontSpan(subtitle.getTypeface()), from, both.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            both.setSpan(new AbsoluteSizeSpan(16, true), from, both.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            both.setSpan(new ForegroundColorSpan(0xFFD6DEE8), from, both.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (lineCount(both) <= 2) {
+                title.setText(both);
+                subtitle.setVisibility(View.GONE);
+                return;
+            }
+        }
+        summary.setMaxLines(1);
+    }
+
+    /** A typeface for part of a text (TypefaceSpan only takes a Typeface from API 28). */
+    private static final class FontSpan extends MetricAffectingSpan {
+        private final Typeface face;
+
+        FontSpan(Typeface face) {
+            this.face = face;
+        }
+
+        @Override public void updateDrawState(TextPaint paint) {
+            paint.setTypeface(face);
+        }
+
+        @Override public void updateMeasureState(TextPaint paint) {
+            paint.setTypeface(face);
+        }
+    }
+
+    private int lineCount(CharSequence text) {
+        if (text.length() == 0) return 1;
+        return StaticLayout.Builder.obtain(text, 0, text.length(), title.getPaint(), textWidth).setMaxLines(3).build().getLineCount();
+    }
+
     /** Puts the title at {@link #index} on screen: its picture is decoded off the main thread, then faded in. */
     private void display(boolean first) {
         if (entries.isEmpty()) return;
@@ -464,9 +531,7 @@ final class PicksHero {
             activity.runOnUiThread(() -> {
                 if (mine != request) return;
                 label.setText(e.resume ? R.string.continue_row_title : R.string.picks_hero_title);
-                title.setText(e.title);
-                subtitle.setText(e.subtitle);
-                summary.setText(e.summary);
+                showTexts(e);
                 summary.setVisibility(e.summary == null || e.summary.isEmpty() ? View.GONE : View.VISIBLE);
                 texts.setAlpha(0f);
                 texts.animate().alpha(1f).setDuration(FADE_MS).start();
