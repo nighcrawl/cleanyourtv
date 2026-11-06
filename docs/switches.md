@@ -72,3 +72,5 @@ rule sit on its wanted list until a screenshot arrives.
 | `game_day` | <img src="switches/game_day.jpg" width="320" alt="game_day: Minnesota Vikings at Detroit Lions, Kickoff in 5d 13h, with four dots, under the clock on a TV"> |
 | `clock_format` | <img src="switches/clock_format.jpg" width="320" alt="clock_format on a TV"> |
 | `glow_snap` | <img src="switches/glow_snap.jpg" width="320" alt="glow_snap on a TV: the glow in Netflix red behind the dock"> |
+| `picks_hero` | <img src="switches/picks_hero.jpg" width="320" alt="picks_hero on a TV"> |
+| `home_layout` | <img src="switches/home_layout.jpg" width="320" alt="home_layout streaming on a TV"> |
