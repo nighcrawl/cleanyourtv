@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">TMDB Picks</string>
+
+
+    <string name="kind_movie">Movie</string>
+    <string name="kind_show">Series</string>
+    <string name="no_apps">None of Netflix, Disney+, Prime Video or Canal+ is installed on this TV, so there is nothing to recommend.</string>
+    <string name="change_key">TMDB key</string>
+    <string name="loading">Loading…</string>
+    <string name="offline">Cannot reach TMDB. Check the network and reopen.</string>
+    <string name="attribution">This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
+
+    <string name="setup_title">Connect your TMDB key</string>
+    <string name="setup_hint">Scan the code with your phone, then paste your TMDB API key on the page that opens. Phone and TV must be on the same Wi-Fi.</string>
+    <string name="setup_no_network">The TV has no local network address. Connect it to Wi-Fi or Ethernet, then reopen.</string>
+    <string name="setup_waiting">Waiting for the key…</string>
+
+    <string name="web_title" translatable="false">TMDB Picks</string>
+    <string name="web_label">TMDB API key (v3 key or v4 token)</string>
+    <string name="web_button">Send to the TV</string>
+    <string name="web_saved">Saved. You can close this page.</string>
+    <string name="web_invalid">TMDB refused this key. Go back and try again.</string>
+</resources>

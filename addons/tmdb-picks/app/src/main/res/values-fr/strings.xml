@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="kind_movie">Film</string>
+    <string name="kind_show">Série</string>
+    <string name="no_apps">Ni Netflix, ni Disney+, ni Prime Video, ni Canal+ n\'est installé sur cette TV : rien à recommander.</string>
+    <string name="change_key">Clé TMDB</string>
+    <string name="loading">Chargement…</string>
+    <string name="offline">TMDB injoignable. Vérifiez le réseau et rouvrez.</string>
+    <string name="attribution">Ce produit utilise l\'API TMDB mais n\'est ni approuvé ni certifié par TMDB.</string>
+
+    <string name="setup_title">Connecter votre clé TMDB</string>
+    <string name="setup_hint">Scannez le code avec votre téléphone, puis collez votre clé API TMDB dans la page qui s\'ouvre. Téléphone et TV doivent être sur le même Wi-Fi.</string>
+    <string name="setup_no_network">La TV n\'a pas d\'adresse sur le réseau local. Connectez-la au Wi-Fi ou à l\'Ethernet, puis rouvrez.</string>
+    <string name="setup_waiting">En attente de la clé…</string>
+
+    <string name="web_label">Clé API TMDB (clé v3 ou jeton v4)</string>
+    <string name="web_button">Envoyer à la TV</string>
+    <string name="web_saved">Enregistrée. Vous pouvez fermer cette page.</string>
+    <string name="web_invalid">TMDB a refusé cette clé. Revenez en arrière et réessayez.</string>
+</resources>

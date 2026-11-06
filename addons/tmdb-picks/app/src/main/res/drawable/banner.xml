@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The TV banner: three posters on a dark blue ground. Drawn for this add-on, no third-party art. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#FF0D253F" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#FF1B4F7A" android:pathData="M60,40h60v100h-60z" />
+    <path android:fillColor="#FF01B4E4" android:pathData="M130,30h60v120h-60z" />
+    <path android:fillColor="#FF90CEA1" android:pathData="M200,40h60v100h-60z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M148,76l26,14l-26,14z" />
+</vector>

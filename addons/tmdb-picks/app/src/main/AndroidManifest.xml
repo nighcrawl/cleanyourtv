@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <!-- The only permission: TMDB for the lists and posters, and a small server on the home network for the
+         key page, which runs only while the pairing screen is open. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Whether each streaming app is installed (the recommendations are only for the ones that are). -->
+    <queries>
+        <package android:name="com.netflix.ninja" />
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="com.amazon.amazonvideo.livingroom" />
+        <package android:name="com.canal.android.canal" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:banner="@drawable/banner"
+        android:icon="@drawable/icon"
+        android:label="@string/app_name"
+        android:supportsRtl="false"
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+
+        <activity
+            android:name=".PicksActivity"
+            android:exported="true"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <!-- Clean Your TV module card (docs/specs/card.md): the tile shows as "TMDB Picks" once the owner says Show. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="com.gathin.tvhome.category.DOCK_CARD" />
+            </intent-filter>
+            <meta-data android:name="com.gathin.tvhome.card" android:resource="@xml/module_card" />
+        </activity>
+
+        <!-- Read by the Clean Your TV launcher's recommendations row (picks_row): titles and 16:9 pictures, nothing
+             else, and never the key. -->
+        <provider
+            android:name=".ItemsProvider"
+            android:authorities="com.gathin.tmdbpicks.items"
+            android:exported="true" />
+    </application>
+</manifest>
