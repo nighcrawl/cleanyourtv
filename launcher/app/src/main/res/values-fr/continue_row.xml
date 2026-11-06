@@ -4,8 +4,4 @@
     <string name="picks_hero_title">Recommandations</string>
     <string name="picks_watch">Regarder</string>
     <string name="picks_hero_state">Bannière de recommandations : %1$s</string>
-    <string name="dock_fixed_state">Dock fixé en bas de l\'écran : %1$s</string>
-    <string name="apps_layout_state">Toutes les apps : %1$s</string>
-    <string name="apps_layout_row">ligne défilable</string>
-    <string name="apps_layout_grid">grille</string>
 </resources>

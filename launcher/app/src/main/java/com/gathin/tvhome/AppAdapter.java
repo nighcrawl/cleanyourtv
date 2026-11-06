@@ -248,7 +248,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.dockTitle = cfg.dockTitle;
         // The others' tiles are plain (a sideways row or a grid): no dock band, no empty slots, no library pill.
         this.dockRow = slice == Slice.REST ? false : cfg.dockRow;
-        this.singleRow = slice == Slice.REST ? cfg.appsRow : cfg.singleRow;
+        this.singleRow = slice == Slice.REST ? false : cfg.singleRow;
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;
