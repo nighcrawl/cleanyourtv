@@ -147,7 +147,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private ContinueRow continueRow;
     /** picks_hero: the Recommendations banner above it; null when off. */
     private PicksHero picksHero;
-    /** home_layout streaming: the banner, the rows and the fixed dock; null in the classic layout. */
+    /** home_layout streaming: the banner, the dock and the rows below it on one scrolling page; null in the classic layout. */
     private StreamingHome streaming;
     /** settings_dropdown: the Settings button opens a list of the TV settings and the launcher settings. */
     private boolean settingsDropdown;
@@ -755,7 +755,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 @Override public void openInput(String inputId) { onOpenInput(inputId); }
             });
             streaming.setSavedOrder(Order.ranks(savedOrder, dockApps), Order.docked(savedOrder, dockApps));
-            hero.setVisibility(View.GONE);   // the dock app's name has no place above a dock fixed at the bottom
+            hero.setVisibility(View.GONE);   // the dock app's name has no place over the banner
             root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> streaming.layout());
         }
 
@@ -782,6 +782,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // A single row never shows the names under its tiles (the title above the row names the app), so the
             // 7dp gap and 22dp label item_app.xml keeps for them would only lift the row: sit it that much lower.
             if (singleRow && !cfg.alwaysShowNames) want += (int) (29 * density);
+            // Streaming home: the dock rests this far above the bottom edge, so the first of what is below it shows.
+            if (streaming != null) want = Math.max(0, want - (int) (StreamingHome.PEEK_DP * density));
             if (grid.getPaddingTop() != want) {
                 grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
                 // A vertical grid parks the dock on the new padding line by scrolling (onTileFocused); a sideways
@@ -2591,8 +2593,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int count = adapter.appCount();
         int target;
         if (streaming != null && (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) {
-            // The dock is the only row of the grid view here: Up goes to the rows above it, Down has nowhere to go.
+            // The dock is the only row of the grid view here: Up goes to the banner above it, Down to the rows below.
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) streaming.focusAboveDock();
+            else streaming.focusBelowDock();
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP && position < COLUMNS

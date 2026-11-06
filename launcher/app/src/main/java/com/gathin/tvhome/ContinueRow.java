@@ -82,6 +82,7 @@ final class ContinueRow {
     private List<Entry> entries = new ArrayList<>();
     private long lastLoad = -REFRESH_MS;
     private boolean loading;
+    private Runnable onChanged;
     private boolean shown;
     private float heroTop, dockTop, topLimit;
     /** Streaming home's fixed place (showAt); the height is 0 in the classic layout. */
@@ -280,10 +281,17 @@ final class ContinueRow {
         return box;
     }
 
-    /** Moves the row up by dy pixels with the grid it sits above (streaming home), cutting off what passes under the header. */
-    void shiftUp(int dy) {
-        box.setY(fixedTop - dy);
-        box.setClipBounds(dy > 0 ? new Rect(0, dy, box.getWidth(), Math.max(box.getHeight(), box.getLayoutParams().height)) : null);
+    /** Puts the row at y in the root, cutting off what passes above clipY (under the header) and following it for the glass. */
+    void setPosition(float y, float clipY) {
+        box.setY(y);
+        int cut = Math.round(clipY - y);
+        box.setClipBounds(cut > 0 ? new Rect(0, cut, box.getWidth(), Math.max(box.getHeight(), px(FIXED_DP) + posterH)) : null);
+        if (focusedCard != null) notifyFocused(focusedCard);
+    }
+
+    /** Height of the row as shown: 0 while it has nothing to show or does not fit. */
+    int shownHeight() {
+        return entries.isEmpty() || !fits ? 0 : px(FIXED_DP) + posterH;
     }
 
     void hide() {
@@ -371,6 +379,12 @@ final class ContinueRow {
             if (fixedHeight > 0) showAt(fixedTop, fixedHeight);
             else show(heroTop, dockTop, topLimit);
         }
+        if (onChanged != null) onChanged.run();
+    }
+
+    /** Called once the rows have changed (the streaming home lays out again around the new height). */
+    void setOnChanged(Runnable onChanged) {
+        this.onChanged = onChanged;
     }
 
     /** The cards for the current rows at the current size; focus stays on the same position. */

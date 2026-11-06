@@ -3,22 +3,24 @@ package com.gathin.tvhome;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
+import android.animation.ValueAnimator;
 import android.graphics.Rect;
 import android.view.View;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import androidx.recyclerview.widget.GridLayoutManager;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.List;
 import java.util.Map;
 
 /**
- * The streaming home (config.xml, home_layout): a full-screen Recommendations banner with the clock and buttons drawn
- * over it and the dock of favourites fixed at the bottom. Going down from the banner brings up a row of Continue
- * watching cards and a sideways row of all the other apps, in place of the banner; they go, and the banner comes back,
- * when focus leaves them. The
- * dock is still the launcher's grid view, listing only the dock apps; this class adds the rest around it, from fixed
- * geometry that does not depend on what has focus.
+ * The streaming home (config.xml, home_layout): one page that scrolls under the clock and buttons. At rest it is the
+ * full-screen Recommendations banner with the dock of favourites at its bottom, and the first of what is below the dock
+ * peeking under it. Going down brings up the rest of the page: the dock slides to the top, then Continue watching,
+ * then all the other apps as a grid, which scrolls on from there. With picks_hero off the banner shows what was being
+ * watched instead of the recommendations, and there is no Continue watching row: the apps peek under the dock. The dock is still the launcher's grid
+ * view, listing only the dock apps; this class adds the rest around it, from fixed geometry that does not depend on
+ * what has focus, and moves the pieces together with translations (the margins hold the page's scrolled-down layout).
  */
 final class StreamingHome {
     interface Host {
@@ -37,22 +39,38 @@ final class StreamingHome {
     private static final int CONTINUE_COLUMNS = 6;
     /** Where the dock grid's tiles start from the screen edges: the header's 56dp plus the grid's own 10dp. */
     private static final int SIDE_DP = 66;
+    /** How much of what is below the dock shows at rest: MainActivity lifts the dock by this much from the bottom edge. */
+    static final int PEEK_DP = 72;
+    private static final long SLIDE_MS = 240;
 
     private final Host host;
     private final FrameLayout root;
     private final RecyclerView grid;
     private final float d;
     private final int columns;
-    /** Null when the Recommendations banner is off (config.xml, picks_hero): the rows then stay up. */
+    /** The full-screen banner: the recommendations, or, with them off (config.xml, picks_hero), what was being watched. */
     private final PicksHero banner;
-    /** The clock and its date: Continue watching starts under it when the apps are a grid. */
+    /** The clock and its date: the scrolling page is clipped under it. */
     private final View clock;
-    private final boolean rowApps;
+    private final boolean slides;
+    /** The Continue watching row under the dock; null when picks_hero is off, as the banner then shows those titles. */
     private final ContinueRow continueRow;
     private final RecyclerView appsRow;
     private final AppAdapter apps;
     private final Rect rect = new Rect();
+    private final ValueAnimator slide = ValueAnimator.ofFloat(0f, 1f);
+    /** True while focus is below the dock; the page is then scrolled down by {@link #restShift}. */
     private boolean rowsShown;
+    /** 0: the page at rest (the dock at the bottom), 1: scrolled down to the dock at the top. */
+    private float page;
+
+    // Geometry from layout(), in px.
+    private int restShift, appsTop, continueRowsTop;
+    private boolean haveApps;
+    /** How far the apps grid has scrolled, from its own scroll events: computeVerticalScrollOffset reads wrong while the padding changes. */
+    private int scrolled;
+    /** What the last layout() was computed from: it runs again next frame while that keeps changing (the dock settles late). */
+    private int lastGeometry;
 
     StreamingHome(Activity activity, FrameLayout root, RecyclerView grid, View header, float density, Config cfg,
                   int columns, boolean animations, boolean reducedMotion, boolean advancedEffects, boolean overshoot,
@@ -63,43 +81,46 @@ final class StreamingHome {
         this.d = density;
         this.columns = columns;
         this.clock = activity.findViewById(R.id.leftBlock);
-        this.rowApps = cfg.appsRow;
-        banner = !cfg.picksHero ? null : new PicksHero(activity, root, density, new PicksHero.Host() {
-            @Override public void focusDock() { focusBelowBanner(); }
+        this.slides = animations && !reducedMotion;
+        banner = new PicksHero(activity, root, density, new PicksHero.Host() {
+            @Override public void focusDock() { host.focusDock(); }
             @Override public void focusTop() { host.focusTop(); }
             @Override public void open(Intent intent) { host.open(intent); }
-        }, true);
-        continueRow = new ContinueRow(activity, root, density, new ContinueRow.Host() {
+        }, true, !cfg.picksHero, cfg.picksHero);
+        continueRow = !cfg.picksHero ? null : new ContinueRow(activity, root, density, new ContinueRow.Host() {
             @Override public void focusDock() { focusApps(); }
-            @Override public void focusTop() { focusAboveContinue(); }
+            @Override public void focusTop() { host.focusDock(); }
             @Override public void open(Intent intent) { host.open(intent); }
             @Override public void onHeroCovered(boolean covered) { }
             @Override public void onCardFocused(float cx, float cy, int w, int h, float radius) {
                 host.placeGlass(cx, cy, w, h, radius);
             }
         }, animations, reducedMotion, advancedEffects, overshoot, cfg.continueColumns);
+        if (continueRow != null) continueRow.setOnChanged(this::layout);
+        slide.setDuration(SLIDE_MS);
+        slide.setInterpolator(new DecelerateInterpolator());
+        slide.addUpdateListener(a -> {
+            page = (float) a.getAnimatedValue();
+            applyPage();
+        });
 
         apps = new AppAdapter(activity, new AppAdapter.TileListener() {
             @Override public void onTileFocused(int position, View card) { placeGlassOver(card); }
             @Override public boolean onTileVerticalKey(int position, int keyCode) {
                 switch (keyCode) {
                     case android.view.KeyEvent.KEYCODE_DPAD_UP:
-                        if (rowApps || position < StreamingHome.this.columns) {
+                        if (position < StreamingHome.this.columns) {
                             focusAboveApps();
                             return true;
                         }
                         return false;
                     case android.view.KeyEvent.KEYCODE_DPAD_DOWN:
-                        if (rowApps || position / StreamingHome.this.columns == (apps.appCount() - 1) / StreamingHome.this.columns) {
-                            host.focusDock();
-                            return true;
-                        }
-                        return false;
+                        // The last row is the page's end: nothing below it.
+                        return position / StreamingHome.this.columns == (apps.appCount() - 1) / StreamingHome.this.columns;
                     case android.view.KeyEvent.KEYCODE_DPAD_LEFT:
-                        return rowApps ? position == 0 : position % StreamingHome.this.columns == 0;
+                        return position % StreamingHome.this.columns == 0;
                     case android.view.KeyEvent.KEYCODE_DPAD_RIGHT:
-                        return position == apps.appCount() - 1
-                                || !rowApps && (position + 1) % StreamingHome.this.columns == 0;
+                        return position == apps.appCount() - 1 || (position + 1) % StreamingHome.this.columns == 0;
                     default:
                         return false;
                 }
@@ -112,36 +133,47 @@ final class StreamingHome {
         }, columns, cfg, AppAdapter.Slice.REST);
 
         appsRow = new RecyclerView(activity);
-        appsRow.setLayoutManager(rowApps ? new LinearLayoutManager(activity, RecyclerView.HORIZONTAL, false)
-                : new GridLayoutManager(activity, columns));
+        appsRow.setLayoutManager(new GridLayoutManager(activity, columns));
         appsRow.setClipChildren(false);
         appsRow.setClipToPadding(false);
-        if (!rowApps) appsRow.addOnLayoutChangeListener((v, l, t, r, bt, ol, ot, or, ob) ->
+        appsRow.addOnLayoutChangeListener((v, l, t, r, bt, ol, ot, or, ob) ->
                 v.setClipBounds(new Rect(0, 0, r - l, bt - t)));   // the tiles scroll under the header, not over it
         appsRow.setItemAnimator(null);
         appsRow.setHasFixedSize(true);
         appsRow.setOverScrollMode(View.OVER_SCROLL_NEVER);
         int side = px(SIDE_DP);
         appsRow.setPadding(side, px(ZOOM_ROOM_DP), side, px(ZOOM_ROOM_DP));
-        appsRow.setVisibility(View.INVISIBLE);
         appsRow.setAdapter(apps);
         appsRow.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(RecyclerView rv, int dx, int dy) {
-                View focused = rv.getFocusedChild();
-                View card = focused == null ? null : focused.findViewById(R.id.card);
-                if (card != null && card.isFocused()) placeGlassOver(card);   // the highlight follows the tiles as they scroll
-                if (!rowApps) continueRow.shiftUp(rv.computeVerticalScrollOffset());   // Continue watching rides up with the grid
+                scrolled = Math.max(0, scrolled + dy);
+                applyPage();   // the dock and Continue watching ride up with the grid, and the highlight with its tiles
             }
         });
         root.addView(appsRow, new FrameLayout.LayoutParams(-1, px(100), android.view.Gravity.TOP | android.view.Gravity.START));
-        // The rows are up exactly while focus is in them.
+        // The page is scrolled down exactly while focus is below the dock.
         root.getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus, newFocus) -> {
-            if (newFocus != null) setRows(continueRow.owns(newFocus) || appsRow.findContainingItemView(newFocus) != null);
+            if (newFocus == null) return;
+            boolean inApps = appsRow.findContainingItemView(newFocus) != null;
+            if (!inApps) {
+                if (scrolled > 0) appsRow.scrollBy(0, -scrolled);   // back to the top of the grid before the dock shows again
+            }
+            setRows(inApps || continueRow != null && continueRow.owns(newFocus));
         });
+
+        // The dock parks itself by scrolling after the first layout, and a rebuilt Home settles after that again: lay
+        // the page out again whenever the dock moves, and once more when things have settled.
+        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(RecyclerView rv, int dx, int dy) {
+                layout();
+            }
+        });
+        root.postDelayed(this::layout, 500);
+        root.postDelayed(this::layout, 1500);
 
         // Under the clock and the buttons, and under the glass: the banner and rows go before the header in the root.
         int at = root.indexOfChild(header);
-        for (View v : banner == null ? new View[]{continueRow.view(), appsRow} : new View[]{banner.view(), continueRow.view(), appsRow}) {
+        for (View v : continueRow == null ? new View[]{banner.view(), appsRow} : new View[]{banner.view(), continueRow.view(), appsRow}) {
             root.removeView(v);
             root.addView(v, at++);
         }
@@ -163,21 +195,23 @@ final class StreamingHome {
     }
 
     void refresh() {
-        if (banner != null) banner.refresh();
-        continueRow.refresh();
+        banner.refresh();
+        if (continueRow != null) continueRow.refresh();
     }
 
     void close() {
-        if (banner != null) banner.close();
-        continueRow.close();
+        slide.cancel();
+        banner.close();
+        if (continueRow != null) continueRow.close();
     }
 
     // ---- Geometry ----------------------------------------------------------------------------------------------
 
     /**
-     * Places the rows from the screen's height and where the dock sits: the apps row right above the dock, the Continue
-     * watching row above that with the room its cards need, and the banner takes everything that is left, from the top
-     * edge. Called whenever the dock may have moved (the grid lays out) and when the apps change.
+     * Lays the page out from the screen's height and where the dock rests: the page's scrolled-down layout (dock at the
+     * top, then Continue watching, then the apps) is held by the margins and padding, and the page at rest is that
+     * layout moved down by {@link #restShift}. The banner takes everything above the dock. Called whenever the dock may
+     * have moved (the grid lays out) and when the apps or Continue watching change.
      */
     void layout() {
         int rootH = root.getHeight();
@@ -185,113 +219,106 @@ final class StreamingHome {
         // The dock's decorated top: where its first tile really is (DockDecoration leaves 6dp above the row). Before
         // the grid has laid out a tile, the grid's top plus the padding that pushes the dock row down.
         View first = grid.getLayoutManager() == null ? null : grid.getLayoutManager().findViewByPosition(0);
-        int dockTop;
+        int dockTop, dockBlock;
+        int gap = px(GAP_DP);
         if (first != null) {
             rect.set(0, 0, first.getWidth(), first.getHeight());
             root.offsetDescendantRectToMyCoords(first, rect);
             dockTop = rect.top - px(6);
+            dockBlock = first.getHeight() + px(6) + px(12) + gap;   // the tile, the room above it and DockDecoration's below
         } else {
             rect.set(0, 0, grid.getWidth(), grid.getHeight());
             root.offsetDescendantRectToMyCoords(grid, rect);
             dockTop = rect.top + grid.getPaddingTop() - px(6);
+            dockBlock = px(100);
         }
-        int inner = root.getWidth() - 2 * px(SIDE_DP);
-        int tileW = AppAdapter.tileWidthPx(inner, columns, d);
-        int appsItemH = AppAdapter.itemHeightPx(AppAdapter.tileHeightPx(tileW), false, d);
-        int appsH = appsItemH + 2 * px(ZOOM_ROOM_DP);
-        int gap = px(GAP_DP);
-        int appsTop = dockTop - gap - appsH;
-        int continueH = continueRow.heightFor(CONTINUE_COLUMNS);
-        int continueTop;
-        if (rowApps) {
-            continueTop = appsTop - gap - continueH;
-        } else {
-            // A grid: Continue watching is its first row, from just under the clock and buttons. The grid fills
-            // everything down to the dock, with room at its top for that row, and scrolls it up with the tiles.
-            rect.set(0, 0, clock.getWidth(), clock.getHeight());
-            root.offsetDescendantRectToMyCoords(clock, rect);
-            continueTop = rect.bottom + px(4);
-            appsTop = continueTop;
-            appsH = Math.max(appsH, dockTop - gap - appsTop);
-            int pad = continueH + gap;
-            if (appsRow.getPaddingTop() != pad) {
-                appsRow.setPadding(appsRow.getPaddingLeft(), pad, appsRow.getPaddingRight(), px(ZOOM_ROOM_DP));
-            }
+        rect.set(0, 0, clock.getWidth(), clock.getHeight());
+        root.offsetDescendantRectToMyCoords(clock, rect);
+        appsTop = rect.bottom + px(4);
+        int dockTopRows = appsTop + px(ZOOM_ROOM_DP);
+        restShift = Math.max(0, dockTop - dockTopRows);
+        continueRowsTop = dockTopRows + dockBlock;
+
+        int continueH = 0;
+        if (continueRow != null) {
+            // Under the dock: the row's own height, whatever the room.
+            continueRow.showAt(continueRowsTop, continueRow.heightFor(CONTINUE_COLUMNS));
+            continueH = continueRow.shownHeight();
         }
-        boolean haveApps = apps.appCount() > 0;
-        if (!haveApps) appsTop = dockTop;
+        int belowH = continueH > 0 ? continueH + gap : 0;
+        int pad = continueRowsTop - appsTop + belowH;
+        if (appsRow.getPaddingTop() != pad) {
+            appsRow.setPadding(appsRow.getPaddingLeft(), pad, appsRow.getPaddingRight(), px(ZOOM_ROOM_DP));
+            // The grid keeps its first tile where it was when the padding changes: put it back under the new padding.
+            if (appsRow.getFocusedChild() == null) appsRow.post(() -> ((GridLayoutManager) appsRow.getLayoutManager()).scrollToPositionWithOffset(0, 0));
+        }
+        haveApps = apps.appCount() > 0;
+        if (appsRow.getFocusedChild() == null) scrolled = 0;   // a reload puts the grid back at its top
         // A margin, not a translation: offsetDescendantRectToMyCoords (the glass) ignores translations.
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) appsRow.getLayoutParams();
+        int appsH = rootH - appsTop;
         if (lp.height != appsH || lp.topMargin != appsTop) {
             lp.height = appsH;
             lp.topMargin = appsTop;
             appsRow.requestLayout();
         }
-        if (banner != null) banner.showFixed(0, rootH, rootH - dockTop + gap + px(28));
-        this.haveApps = haveApps;
-        this.continueTop = continueTop;
-        this.continueH = continueH;
-        applyRows();
+        appsRow.setVisibility(haveApps ? View.VISIBLE : View.INVISIBLE);
+        int geometry = (dockTop * 31 + appsTop) * 31 + dockBlock;
+        if (geometry != lastGeometry) {
+            lastGeometry = geometry;
+            root.post(this::layout);
+        }
+        banner.showFixed(0, rootH, rootH - dockTop + gap + px(28));
+        banner.setShownOver(!rowsShown);
+        applyPage();
     }
 
-    private boolean haveApps;
-    private int continueTop, continueH;
+    /** Moves the dock, Continue watching and the apps to where the scroll has the page: the rows' scroll offset plus the slide. */
+    private void applyPage() {
+        float down = restShift * page;
+        grid.setTranslationY(-(down + scrolled));
+        appsRow.setTranslationY(restShift * (1 - page));
+        if (continueRow != null) continueRow.setPosition(continueRowsTop + restShift * (1 - page) - scrolled, appsTop);
+        View focused = appsRow.getFocusedChild();
+        View card = focused == null ? null : focused.findViewById(R.id.card);
+        if (card != null && card.isFocused()) placeGlassOver(card);
+    }
 
-    /** Brings the two rows up, with the banner gone from behind them, or puts them away and brings the banner back. */
+    /** Scrolls the page down to the rows, away from the banner, or back to rest with the banner. */
     private void setRows(boolean show) {
         if (show == rowsShown) return;
         rowsShown = show;
-        applyRows();
-    }
-
-    private void applyRows() {
-        if (rowsShown || banner == null) {
-            continueRow.showAt(continueTop, continueH);
-            if (!rowApps) continueRow.shiftUp(appsRow.computeVerticalScrollOffset());
-            appsRow.setVisibility(haveApps ? View.VISIBLE : View.INVISIBLE);
-            if (banner != null) banner.setShownOver(false);
+        banner.setShownOver(!show);
+        slide.cancel();
+        float to = show ? 1f : 0f;
+        if (!slides || root.getHeight() <= 0) {
+            page = to;
+            applyPage();
         } else {
-            banner.setShownOver(true);
-            continueRow.hide();
-            appsRow.setVisibility(View.INVISIBLE);
+            slide.setFloatValues(page, to);
+            slide.start();
         }
     }
 
     // ---- Focus -------------------------------------------------------------------------------------------------
 
-    /** Up from the dock: the banner. The rows only come up from there, going down. */
+    /** Up from the dock: the banner, or the top bar when it is empty. */
     void focusAboveDock() {
-        if (!focusBanner()) {
-            setRows(true);
-            if (!continueRow.focusFirst() && !focusApps()) host.focusTop();
-        }
+        if (!banner.focus()) host.focusTop();
     }
 
-    /** Down from the top bar: the banner, or the rows when there is no banner. */
+    /** Down from the dock: Continue watching below it, or the apps. */
+    void focusBelowDock() {
+        if (continueRow == null || !continueRow.focusFirst()) focusApps();
+    }
+
+    /** Down from the top bar: the banner, or the dock when it is empty. */
     void focusFromTop() {
-        if (focusBanner()) return;
-        setRows(true);
-        if (!continueRow.focusFirst() && !focusApps()) host.focusDock();
-    }
-
-    private boolean focusBanner() {
-        return banner != null && banner.focus();
-    }
-
-    private void focusBelowBanner() {
-        setRows(true);
-        if (!continueRow.focusFirst() && !focusApps()) {
-            setRows(false);
-            host.focusDock();
-        }
-    }
-
-    private void focusAboveContinue() {
-        if (!focusBanner()) host.focusTop();
+        if (!banner.focus()) host.focusDock();
     }
 
     private void focusAboveApps() {
-        if (!continueRow.focusFirst() && !focusBanner()) host.focusTop();
+        if (continueRow == null || !continueRow.focusFirst()) host.focusDock();
     }
 
     private boolean focusApps() {
@@ -304,7 +331,7 @@ final class StreamingHome {
 
     /** Whether v is a poster of the Continue watching row, so the launcher keeps the glass while focus is on it. */
     boolean owns(View v) {
-        return continueRow.owns(v);
+        return continueRow != null && continueRow.owns(v);
     }
 
     private void placeGlassOver(View card) {
@@ -316,6 +343,7 @@ final class StreamingHome {
         }
         rect.set(0, 0, card.getWidth(), card.getHeight());
         root.offsetDescendantRectToMyCoords(card, rect);
+        rect.offset(0, Math.round(appsRow.getTranslationY()));   // the offset above leaves translations out
         host.placeGlass(rect.exactCenterX(), rect.exactCenterY(), card.getWidth(), card.getHeight(),
                 AppAdapter.cornerRadius(card.getWidth(), d));
     }
