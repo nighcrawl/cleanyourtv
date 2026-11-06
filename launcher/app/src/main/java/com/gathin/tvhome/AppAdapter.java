@@ -138,7 +138,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** DockDecoration's offsets above and below the dock row. */
     static final float DOCK_EXTRA_DP = 6 + 12;
     /** Room kept under the last row rows_below_dock asks for (MainActivity places the dock with the same). */
-    static final float BOTTOM_ROOM_DP = 30;
+    static final float BOTTOM_ROOM_DP = 12;
     /** Room kept above the dock for the dock title (48sp hero name plus its 40dp gap) when dock_title is on. */
     static final float TITLE_ROOM_DP = 104;
     /** dock_row false: room above the first row for its zoom and glass (MainActivity places the grid with it). */
@@ -246,9 +246,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.focusOvershoot = cfg.focusOvershoot;
         this.rowsBelowDock = cfg.rowsBelowDock;
         this.dockTitle = cfg.dockTitle;
-        // The others' row is a plain sideways row: no dock band, no empty slots, no library pill.
+        // The others' tiles are plain (a sideways row or a grid): no dock band, no empty slots, no library pill.
         this.dockRow = slice == Slice.REST ? false : cfg.dockRow;
-        this.singleRow = slice == Slice.REST ? true : cfg.singleRow;
+        this.singleRow = slice == Slice.REST ? cfg.appsRow : cfg.singleRow;
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;

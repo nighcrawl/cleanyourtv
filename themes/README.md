@@ -130,7 +130,7 @@ A new key needs one there in the same pull request.
 | `date_below_clock` | bool | The date (with the Shamsi and lunar lines) on its own line under the clock instead of beside it, for a top bar whose pills leave the date too little room (`false` by default) |
 | `locale` | string | The language the launcher shows itself in, as a language tag (`"vi"`, `"pt-BR"`, `"ar-EG-u-nu-latn"` for Arabic with Western digits), instead of the TV's: for firmware with no menu entry for a language the launcher speaks (a China-market Xiaomi offers Chinese and English only). Empty by default, which follows the TV |
 | `greeting_name` | string | A name after the greeting, e.g. `"Mr. Trịnh"` for GOOD MORNING, MR. TRỊNH; empty for the greeting alone |
-| `show_greeting` | bool | The greeting above the clock (`true` by default); `false` hides it |
+| `show_greeting` | bool | The greeting above the clock (`false` by default); `true` shows it |
 | `header_white` | bool | The date and the line between the clock and the date in the clock's full white instead of dimmed (`false` by default) |
 | `auto_theme` | bool | Home turns light while the sun is up (sunrise and sunset from config.xml's `latitude` and `longitude`, 07:30 and 19:00 without them) and dark after sunset: dark ink, frosted pills, dock and highlight, over `day_background_color`. Home only: Settings and the menus stay dark. `false` by default |
 | `day_background_color` | colour | The background of the light Home when `auto_theme` is on (`#E9EDF3` by default); `background_color` is the night's |

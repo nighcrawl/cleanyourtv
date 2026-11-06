@@ -6,6 +6,7 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Rect;
 import android.view.View;
 import android.widget.FrameLayout;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.List;
@@ -42,7 +43,11 @@ final class StreamingHome {
     private final RecyclerView grid;
     private final float d;
     private final int columns;
+    /** Null when the Recommendations banner is off (config.xml, picks_hero): the rows then stay up. */
     private final PicksHero banner;
+    /** The clock and its date: Continue watching starts under it when the apps are a grid. */
+    private final View clock;
+    private final boolean rowApps;
     private final ContinueRow continueRow;
     private final RecyclerView appsRow;
     private final AppAdapter apps;
@@ -57,7 +62,9 @@ final class StreamingHome {
         this.grid = grid;
         this.d = density;
         this.columns = columns;
-        banner = new PicksHero(activity, root, density, new PicksHero.Host() {
+        this.clock = activity.findViewById(R.id.leftBlock);
+        this.rowApps = cfg.appsRow;
+        banner = !cfg.picksHero ? null : new PicksHero(activity, root, density, new PicksHero.Host() {
             @Override public void focusDock() { focusBelowBanner(); }
             @Override public void focusTop() { host.focusTop(); }
             @Override public void open(Intent intent) { host.open(intent); }
@@ -77,15 +84,22 @@ final class StreamingHome {
             @Override public boolean onTileVerticalKey(int position, int keyCode) {
                 switch (keyCode) {
                     case android.view.KeyEvent.KEYCODE_DPAD_UP:
-                        focusAboveApps();
-                        return true;
+                        if (rowApps || position < StreamingHome.this.columns) {
+                            focusAboveApps();
+                            return true;
+                        }
+                        return false;
                     case android.view.KeyEvent.KEYCODE_DPAD_DOWN:
-                        host.focusDock();
-                        return true;
+                        if (rowApps || position / StreamingHome.this.columns == (apps.appCount() - 1) / StreamingHome.this.columns) {
+                            host.focusDock();
+                            return true;
+                        }
+                        return false;
                     case android.view.KeyEvent.KEYCODE_DPAD_LEFT:
-                        return position == 0;
+                        return rowApps ? position == 0 : position % StreamingHome.this.columns == 0;
                     case android.view.KeyEvent.KEYCODE_DPAD_RIGHT:
-                        return position == apps.appCount() - 1;
+                        return position == apps.appCount() - 1
+                                || !rowApps && (position + 1) % StreamingHome.this.columns == 0;
                     default:
                         return false;
                 }
@@ -98,9 +112,12 @@ final class StreamingHome {
         }, columns, cfg, AppAdapter.Slice.REST);
 
         appsRow = new RecyclerView(activity);
-        appsRow.setLayoutManager(new LinearLayoutManager(activity, RecyclerView.HORIZONTAL, false));
+        appsRow.setLayoutManager(rowApps ? new LinearLayoutManager(activity, RecyclerView.HORIZONTAL, false)
+                : new GridLayoutManager(activity, columns));
         appsRow.setClipChildren(false);
         appsRow.setClipToPadding(false);
+        if (!rowApps) appsRow.addOnLayoutChangeListener((v, l, t, r, bt, ol, ot, or, ob) ->
+                v.setClipBounds(new Rect(0, 0, r - l, bt - t)));   // the tiles scroll under the header, not over it
         appsRow.setItemAnimator(null);
         appsRow.setHasFixedSize(true);
         appsRow.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -113,6 +130,7 @@ final class StreamingHome {
                 View focused = rv.getFocusedChild();
                 View card = focused == null ? null : focused.findViewById(R.id.card);
                 if (card != null && card.isFocused()) placeGlassOver(card);   // the highlight follows the tiles as they scroll
+                if (!rowApps) continueRow.shiftUp(rv.computeVerticalScrollOffset());   // Continue watching rides up with the grid
             }
         });
         root.addView(appsRow, new FrameLayout.LayoutParams(-1, px(100), android.view.Gravity.TOP | android.view.Gravity.START));
@@ -123,7 +141,7 @@ final class StreamingHome {
 
         // Under the clock and the buttons, and under the glass: the banner and rows go before the header in the root.
         int at = root.indexOfChild(header);
-        for (View v : new View[]{banner.view(), continueRow.view(), appsRow}) {
+        for (View v : banner == null ? new View[]{continueRow.view(), appsRow} : new View[]{banner.view(), continueRow.view(), appsRow}) {
             root.removeView(v);
             root.addView(v, at++);
         }
@@ -145,12 +163,12 @@ final class StreamingHome {
     }
 
     void refresh() {
-        banner.refresh();
+        if (banner != null) banner.refresh();
         continueRow.refresh();
     }
 
     void close() {
-        banner.close();
+        if (banner != null) banner.close();
         continueRow.close();
     }
 
@@ -183,6 +201,23 @@ final class StreamingHome {
         int appsH = appsItemH + 2 * px(ZOOM_ROOM_DP);
         int gap = px(GAP_DP);
         int appsTop = dockTop - gap - appsH;
+        int continueH = continueRow.heightFor(CONTINUE_COLUMNS);
+        int continueTop;
+        if (rowApps) {
+            continueTop = appsTop - gap - continueH;
+        } else {
+            // A grid: Continue watching is its first row, from just under the clock and buttons. The grid fills
+            // everything down to the dock, with room at its top for that row, and scrolls it up with the tiles.
+            rect.set(0, 0, clock.getWidth(), clock.getHeight());
+            root.offsetDescendantRectToMyCoords(clock, rect);
+            continueTop = rect.bottom + px(4);
+            appsTop = continueTop;
+            appsH = Math.max(appsH, dockTop - gap - appsTop);
+            int pad = continueH + gap;
+            if (appsRow.getPaddingTop() != pad) {
+                appsRow.setPadding(appsRow.getPaddingLeft(), pad, appsRow.getPaddingRight(), px(ZOOM_ROOM_DP));
+            }
+        }
         boolean haveApps = apps.appCount() > 0;
         if (!haveApps) appsTop = dockTop;
         // A margin, not a translation: offsetDescendantRectToMyCoords (the glass) ignores translations.
@@ -192,9 +227,7 @@ final class StreamingHome {
             lp.topMargin = appsTop;
             appsRow.requestLayout();
         }
-        int continueH = continueRow.heightFor(CONTINUE_COLUMNS);
-        int continueTop = appsTop - gap - continueH;
-        banner.showFixed(0, rootH, rootH - dockTop + gap + px(28));
+        if (banner != null) banner.showFixed(0, rootH, rootH - dockTop + gap + px(28));
         this.haveApps = haveApps;
         this.continueTop = continueTop;
         this.continueH = continueH;
@@ -212,10 +245,11 @@ final class StreamingHome {
     }
 
     private void applyRows() {
-        if (rowsShown) {
+        if (rowsShown || banner == null) {
             continueRow.showAt(continueTop, continueH);
+            if (!rowApps) continueRow.shiftUp(appsRow.computeVerticalScrollOffset());
             appsRow.setVisibility(haveApps ? View.VISIBLE : View.INVISIBLE);
-            banner.setShownOver(false);
+            if (banner != null) banner.setShownOver(false);
         } else {
             banner.setShownOver(true);
             continueRow.hide();
@@ -227,7 +261,7 @@ final class StreamingHome {
 
     /** Up from the dock: the banner. The rows only come up from there, going down. */
     void focusAboveDock() {
-        if (!banner.focus()) {
+        if (!focusBanner()) {
             setRows(true);
             if (!continueRow.focusFirst() && !focusApps()) host.focusTop();
         }
@@ -235,9 +269,13 @@ final class StreamingHome {
 
     /** Down from the top bar: the banner, or the rows when there is no banner. */
     void focusFromTop() {
-        if (banner.focus()) return;
+        if (focusBanner()) return;
         setRows(true);
         if (!continueRow.focusFirst() && !focusApps()) host.focusDock();
+    }
+
+    private boolean focusBanner() {
+        return banner != null && banner.focus();
     }
 
     private void focusBelowBanner() {
@@ -249,11 +287,11 @@ final class StreamingHome {
     }
 
     private void focusAboveContinue() {
-        if (!banner.focus()) host.focusTop();
+        if (!focusBanner()) host.focusTop();
     }
 
     private void focusAboveApps() {
-        if (!continueRow.focusFirst() && !banner.focus()) host.focusTop();
+        if (!continueRow.focusFirst() && !focusBanner()) host.focusTop();
     }
 
     private boolean focusApps() {

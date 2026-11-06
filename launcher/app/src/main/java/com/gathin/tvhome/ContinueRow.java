@@ -280,6 +280,12 @@ final class ContinueRow {
         return box;
     }
 
+    /** Moves the row up by dy pixels with the grid it sits above (streaming home), cutting off what passes under the header. */
+    void shiftUp(int dy) {
+        box.setY(fixedTop - dy);
+        box.setClipBounds(dy > 0 ? new Rect(0, dy, box.getWidth(), Math.max(box.getHeight(), box.getLayoutParams().height)) : null);
+    }
+
     void hide() {
         shown = false;
         box.animate().cancel();

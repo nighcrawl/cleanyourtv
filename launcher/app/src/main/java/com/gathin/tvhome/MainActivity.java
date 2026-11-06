@@ -554,11 +554,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             glass.bringToFront();   // the highlight is drawn over the posters, as over the tiles
         }
         if (cfg.picksHero && !cfg.streamingHome) {
+            // The same full-screen banner as the streaming home, with the clock and buttons over it and the dock below.
             picksHero = new PicksHero(this, root, density, new PicksHero.Host() {
                 @Override public void focusDock() { focusTile(lastFocused < COLUMNS ? lastFocused : 0); }
                 @Override public void focusTop() { firstTopButton().requestFocus(); }
                 @Override public void open(Intent intent) { MainActivity.this.open(intent); }
-            });
+            }, true, true);
+            View header = findViewById(R.id.leftBlock);
+            while (header.getParent() != root) header = (View) header.getParent();
+            View banner = picksHero.view();
+            root.removeView(banner);
+            root.addView(banner, root.indexOfChild(header));   // under the clock and buttons, and under the dock
+            hero.setVisibility(View.GONE);   // the dock app's name has no place over the banner's text
             glass.bringToFront();
         }
         // The hero is now a group (name, and the cinematic lines): without this every fade of the default
@@ -798,6 +805,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Cold start or column count > 4: the first focus can run before the grid has its final width or
             // padding, leaving the glass at the XML design size until a key is pressed.
             grid.post(this::refitGlass);
+            if (picksHero != null) grid.post(this::placePicksHero);
             if (streaming != null) grid.post(streaming::layout);
         });
 
@@ -2035,6 +2043,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 || !glassCardRect.equals(r)) {
             onTileFocused(pos, card);
         }
+    }
+
+    /** The banner fills the screen and its text sits just above the dock row, as on the streaming home. */
+    private void placePicksHero() {
+        int rootH = root.getHeight();
+        if (picksHero == null || rootH <= 0 || grid.getHeight() <= 0) return;
+        headerRect.set(0, 0, grid.getWidth(), grid.getHeight());
+        root.offsetDescendantRectToMyCoords(grid, headerRect);
+        int dockTop = headerRect.top + grid.getPaddingTop() - Math.round(6 * density);
+        picksHero.placeFixed(0, rootH, rootH - dockTop + Math.round(10 * density) + Math.round(28 * density));
     }
 
     // ---- top shelf -------------------------------------------------------------------------------

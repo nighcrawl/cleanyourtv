@@ -43,6 +43,10 @@ final class Config {
     static final String ROWS_BELOW_DOCK_KEY = "rows_below_dock";
     /** The number of cards across in Continue watching chosen in Launcher settings. */
     static final String CONTINUE_COLUMNS_KEY = "continue_columns";
+    /** On-TV choices for the Recommendations banner, the fixed dock (streaming home) and all apps as one sideways row. */
+    static final String PICKS_HERO_KEY = "picks_hero";
+    static final String DOCK_FIXED_KEY = "dock_fixed";
+    static final String APPS_ROW_KEY = "apps_row";
     static final String WALLPAPER_CHOICE_KEY = "wallpaper_choice";
     static final String DOCK_OPACITY_KEY = "dock_opacity";
     static final String CLOCK_FORMAT_KEY = "clock_format";
@@ -54,6 +58,15 @@ final class Config {
     /** The on-TV choice of a packed theme (Launcher settings, Theme); it wins over a pushed config.json until Follow theme. */
     static final String THEME_PRESET_KEY = "theme_preset";
     private static final String PRESETS_DIR = "themes";
+
+    private static boolean isStreaming(String homeLayout) {
+        return HOME_STREAMING.equalsIgnoreCase(homeLayout == null ? "" : homeLayout.trim());
+    }
+
+    /** Forgets the on-TV layout choices, so the theme's banner, dock and apps layout show again. */
+    static void removeLayoutChoices(SharedPreferences.Editor editor) {
+        editor.remove(PICKS_HERO_KEY).remove(DOCK_FIXED_KEY).remove(APPS_ROW_KEY);
+    }
 
     /** True when Launcher settings changed something since Home was built at revision {@code seen}. */
     static boolean settingsChanged(long seen, long current) {
@@ -134,6 +147,8 @@ final class Config {
     /** home_layout streaming: full-bleed banner, Continue watching and all apps as rows, the dock fixed at the bottom. */
     final boolean streamingHome;
     static final String HOME_STREAMING = "streaming";
+    /** All apps in one sideways row rather than a grid: the streaming rows, or the classic single_row. */
+    final boolean appsRow;
     /** A large Recommendations banner above the dock, from the TMDB Picks add-on (config.xml, picks_hero). */
     final boolean picksHero;
     /** Names under every tile, dimmed until focused (config.xml always_show_names); the dock band grows for them. */
@@ -314,8 +329,9 @@ final class Config {
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
-                   int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap, boolean settingsDropdown, boolean continueRow, int continueColumns, boolean picksHero, boolean autoTheme, int dayBackgroundColor, boolean themePicker, String homeLayout) {
-        boolean streaming = HOME_STREAMING.equalsIgnoreCase(homeLayout == null ? "" : homeLayout.trim());
+                   int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap, boolean settingsDropdown, boolean continueRow, int continueColumns, boolean picksHero, boolean autoTheme, int dayBackgroundColor, boolean themePicker, String homeLayout, boolean appsRow) {
+        boolean streaming = isStreaming(homeLayout);
+        this.appsRow = appsRow;
         this.streamingHome = streaming;
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
@@ -710,6 +726,11 @@ final class Config {
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
+        // The theme's own layout is what the apps default to; the on-TV choices then override each part.
+        boolean appsRow = isStreaming(homeLayout) || singleRow;
+        if (choices.contains(DOCK_FIXED_KEY)) homeLayout = choices.getBoolean(DOCK_FIXED_KEY, false) ? HOME_STREAMING : "classic";
+        picksHero = choices.getBoolean(PICKS_HERO_KEY, picksHero);
+        appsRow = choices.getBoolean(APPS_ROW_KEY, appsRow);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
         int chosenContinue = choices.getInt(CONTINUE_COLUMNS_KEY, continueColumns);
@@ -765,9 +786,9 @@ final class Config {
                 Math.max(0, idleClockMinutes), keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding,
                 dockBand, cinematicDots, cinematicWhiteFocus, wifiStatusColor, cinematicScrim, cinematicArt, wallpaperMoods, gamepadPassthrough,
                 consumeVolumeKeys, powerOnHome, homeLongPressHome, wifiStatusWarnings, topBarApps, showGreeting, headerWhite, clockWallpaper,
-                Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
+                Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, appsRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
-                Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap, settingsDropdown, continueRow, Math.max(2, Math.min(5, continueColumns)), picksHero, autoTheme, dayBackground, themePicker, homeLayout);
+                Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap, settingsDropdown, continueRow, Math.max(2, Math.min(5, continueColumns)), picksHero, autoTheme, dayBackground, themePicker, homeLayout, appsRow);
     }
 
     /**
@@ -812,11 +833,14 @@ final class Config {
             if (!"absent".equals(token)) editor.remove("columns").remove("animations")
                     .remove("advanced_effects").remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY)
                     .remove(DOCK_OPACITY_KEY).remove(CLOCK_FORMAT_KEY).remove(THEME_PRESET_KEY).remove(CONTINUE_COLUMNS_KEY);
+            removeLayoutChoices(editor);
             editor.putString(THEME_SIGNATURE_KEY, signature).commit();
         } else if (!seen.equals(signature)) {
-            choices.edit().remove("columns").remove("animations").remove("advanced_effects")
+            SharedPreferences.Editor editor = choices.edit().remove("columns").remove("animations").remove("advanced_effects")
                     .remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY).remove(DOCK_OPACITY_KEY)
-                    .remove(CLOCK_FORMAT_KEY).remove(THEME_PRESET_KEY).remove(CONTINUE_COLUMNS_KEY).putString(THEME_SIGNATURE_KEY, signature).commit();
+                    .remove(CLOCK_FORMAT_KEY).remove(THEME_PRESET_KEY).remove(CONTINUE_COLUMNS_KEY);
+            removeLayoutChoices(editor);
+            editor.putString(THEME_SIGNATURE_KEY, signature).commit();
         }
     }
 

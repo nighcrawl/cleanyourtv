@@ -3,4 +3,9 @@
     <string name="continue_row_title" tools:ignore="MissingTranslation">Continue watching</string>
     <string name="picks_hero_title" tools:ignore="MissingTranslation">Recommendations</string>
     <string name="picks_watch" tools:ignore="MissingTranslation">Watch</string>
+    <string name="picks_hero_state" tools:ignore="MissingTranslation">Recommendations banner: %1$s</string>
+    <string name="dock_fixed_state" tools:ignore="MissingTranslation">Dock fixed at the bottom: %1$s</string>
+    <string name="apps_layout_state" tools:ignore="MissingTranslation">All apps: %1$s</string>
+    <string name="apps_layout_row" tools:ignore="MissingTranslation">scrollable row</string>
+    <string name="apps_layout_grid" tools:ignore="MissingTranslation">grid</string>
 </resources>

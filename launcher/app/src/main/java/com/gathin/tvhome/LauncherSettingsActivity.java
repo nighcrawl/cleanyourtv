@@ -35,6 +35,9 @@ public final class LauncherSettingsActivity extends Activity {
     private static final String[] CLOCK_FORMATS = {"system", "12", "24"};
     private final TextView[] clockChoices = new TextView[CLOCK_FORMATS.length];
     private TextView wallpaperChoice;
+    private TextView picksHeroChoice;
+    private TextView dockFixedChoice;
+    private TextView appsLayoutChoice;
     private TextView animationsChoice;
     private TextView advancedChoice;
     private TextView followThemeChoice;
@@ -46,6 +49,9 @@ public final class LauncherSettingsActivity extends Activity {
     private final TextView[] continueChoices = new TextView[4];
     private int dockOpacity;
     private String clockFormat;
+    private boolean picksHero;
+    private boolean dockFixed;
+    private boolean appsRow;
     private boolean animations;
     private boolean advancedEffects;
 
@@ -64,6 +70,9 @@ public final class LauncherSettingsActivity extends Activity {
         columns = config.columns;
         rowsBelowDock = config.rowsBelowDock;
         continueColumns = config.continueColumns;
+        picksHero = config.picksHero;
+        dockFixed = config.streamingHome;
+        appsRow = config.appsRow;
         dockOpacity = config.dockOpacity;
         clockFormat = config.clockFormat;
         animations = config.animations;
@@ -146,6 +155,27 @@ public final class LauncherSettingsActivity extends Activity {
         }
         wallpaperChoice = findViewById(R.id.wallpaperChoice);
         wallpaperChoice.setOnClickListener(v -> showWallpaperPicker());
+        picksHeroChoice = findViewById(R.id.picksHeroChoice);
+        picksHeroChoice.setOnClickListener(v -> {
+            picksHero = !picksHero;
+            choices.edit().putBoolean(Config.PICKS_HERO_KEY, picksHero).apply();
+            changed();
+            refresh();
+        });
+        dockFixedChoice = findViewById(R.id.dockFixedChoice);
+        dockFixedChoice.setOnClickListener(v -> {
+            dockFixed = !dockFixed;
+            choices.edit().putBoolean(Config.DOCK_FIXED_KEY, dockFixed).apply();
+            changed();
+            refresh();
+        });
+        appsLayoutChoice = findViewById(R.id.appsLayoutChoice);
+        appsLayoutChoice.setOnClickListener(v -> {
+            appsRow = !appsRow;
+            choices.edit().putBoolean(Config.APPS_ROW_KEY, appsRow).apply();
+            changed();
+            refresh();
+        });
         animationsChoice = findViewById(R.id.animationsChoice);
         animationsChoice.setOnClickListener(v -> {
             animations = !animations;
@@ -181,10 +211,12 @@ public final class LauncherSettingsActivity extends Activity {
         followThemeChoice = findViewById(R.id.followThemeChoice);
         followThemeChoice.setOnClickListener(v -> {
             if (!hasOnTvChoices()) return;
-            choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
+            SharedPreferences.Editor editor = choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
                     .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
                     .remove(Config.DOCK_OPACITY_KEY).remove(Config.CLOCK_FORMAT_KEY).remove(OpenOnStart.KEY)
-                    .remove(Config.THEME_PRESET_KEY).remove(Config.CONTINUE_COLUMNS_KEY).commit();
+                    .remove(Config.THEME_PRESET_KEY).remove(Config.CONTINUE_COLUMNS_KEY);
+            Config.removeLayoutChoices(editor);
+            editor.commit();
             reloadFromConfig();
             changed();
             refresh();
@@ -204,6 +236,9 @@ public final class LauncherSettingsActivity extends Activity {
         columns = current.columns;
         rowsBelowDock = current.rowsBelowDock;
         continueColumns = current.continueColumns;
+        picksHero = current.picksHero;
+        dockFixed = current.streamingHome;
+        appsRow = current.appsRow;
         clockFormat = current.clockFormat;
         dockOpacity = current.dockOpacity;
         animations = current.animations;
@@ -225,9 +260,11 @@ public final class LauncherSettingsActivity extends Activity {
                     if (which == 0) choices.edit().remove(Config.THEME_PRESET_KEY).commit();
                     else choices.edit().putString(Config.THEME_PRESET_KEY, presets.get(which - 1)).commit();
                     // The layout and motion choices belong to the theme they were made on.
-                    choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
+                    SharedPreferences.Editor reset = choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
                             .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
-                            .remove(Config.DOCK_OPACITY_KEY).remove(Config.CLOCK_FORMAT_KEY).remove(Config.CONTINUE_COLUMNS_KEY).commit();
+                            .remove(Config.DOCK_OPACITY_KEY).remove(Config.CLOCK_FORMAT_KEY).remove(Config.CONTINUE_COLUMNS_KEY);
+                    Config.removeLayoutChoices(reset);
+                    reset.commit();
                     reloadFromConfig();
                     changed();
                     refresh();
@@ -367,6 +404,12 @@ public final class LauncherSettingsActivity extends Activity {
         for (int i = 0; i < clockChoices.length; i++) {
             clockChoices[i].setSelected(CLOCK_FORMATS[i].equals(clockFormat));
         }
+        picksHeroChoice.setText(getString(R.string.picks_hero_state,
+                getString(picksHero ? R.string.on : R.string.off)));
+        dockFixedChoice.setText(getString(R.string.dock_fixed_state,
+                getString(dockFixed ? R.string.on : R.string.off)));
+        appsLayoutChoice.setText(getString(R.string.apps_layout_state,
+                getString(appsRow ? R.string.apps_layout_row : R.string.apps_layout_grid)));
         animationsChoice.setText(getString(R.string.animations_state,
                 getString(animations ? R.string.on : R.string.off)));
         advancedChoice.setText(getString(R.string.advanced_effects_state,
@@ -389,7 +432,9 @@ public final class LauncherSettingsActivity extends Activity {
                 || choices.contains("animations") || choices.contains("advanced_effects")
                 || choices.contains(Config.WALLPAPER_CHOICE_KEY) || choices.contains(Config.DOCK_OPACITY_KEY)
                 || choices.contains(Config.CLOCK_FORMAT_KEY) || choices.contains(OpenOnStart.KEY)
-                || choices.contains(Config.THEME_PRESET_KEY) || choices.contains(Config.CONTINUE_COLUMNS_KEY);
+                || choices.contains(Config.THEME_PRESET_KEY) || choices.contains(Config.CONTINUE_COLUMNS_KEY)
+                || choices.contains(Config.PICKS_HERO_KEY) || choices.contains(Config.DOCK_FIXED_KEY)
+                || choices.contains(Config.APPS_ROW_KEY);
     }
 
     private void open(Intent intent) {

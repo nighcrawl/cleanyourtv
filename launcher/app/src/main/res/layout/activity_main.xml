@@ -212,7 +212,7 @@
                         android:format12Hour="h:mm"
                         android:format24Hour="HH:mm"
                         android:textColor="?attr/homeText"
-                        android:textSize="52sp"
+                        android:textSize="40sp"
                         android:fontFamily="@string/font_light"
                         android:letterSpacing="-0.04"
                         android:includeFontPadding="false" />

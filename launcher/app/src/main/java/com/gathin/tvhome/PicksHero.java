@@ -67,6 +67,8 @@ final class PicksHero {
     private final int inset, screenW;
     /** streaming home: the banner spans the whole screen from its top edge, with no corners, and lists only recommendations. */
     private final boolean fullBleed;
+    /** Whether the Continue watching titles go in the banner too: not on the streaming home, which has its own row. */
+    private final boolean includeContinue;
     /** Height and top the banner is given in full-bleed mode (see {@link #showFixed}). */
     private int fixedTop, fixedHeight;
     private final FrameLayout box;
@@ -93,11 +95,16 @@ final class PicksHero {
     private float heroTop, topLimit;
 
     PicksHero(Activity activity, FrameLayout root, float density, Host host) {
-        this(activity, root, density, host, false);
+        this(activity, root, density, host, false, true);
     }
 
     PicksHero(Activity activity, FrameLayout root, float density, Host host, boolean fullBleed) {
+        this(activity, root, density, host, fullBleed, !fullBleed);
+    }
+
+    PicksHero(Activity activity, FrameLayout root, float density, Host host, boolean fullBleed, boolean includeContinue) {
         this.fullBleed = fullBleed;
+        this.includeContinue = includeContinue;
         this.activity = activity;
         this.host = host;
         this.d = density;
@@ -297,6 +304,13 @@ final class PicksHero {
         layout();
     }
 
+    /** The same as {@link #showFixed}, but a banner that is hidden stays hidden: the classic home hides it off the dock row. */
+    void placeFixed(int topPx, int heightPx, int textBottomPx) {
+        boolean wasShown = shown;
+        showFixed(topPx, heightPx, textBottomPx);
+        if (!wasShown) hide();
+    }
+
     /** The picture and its text go while the rows are up in their place, and come back with the banner. */
     void setShownOver(boolean show) {
         shownOver = show;
@@ -363,7 +377,7 @@ final class PicksHero {
 
     private List<Entry> query() {
         List<Entry> list = new ArrayList<>();
-        if (!fullBleed) read(CONTINUE, true, MAX_CONTINUE, list);   // streaming home has its own Continue watching row
+        if (includeContinue) read(CONTINUE, true, MAX_CONTINUE, list);
         read(PICKS, false, MAX_PICKS, list);
         return list;
     }
